@@ -38,6 +38,7 @@ var death_pose = false
 var animation_time = 0.0
 var pending_weapon = null
 var has_pending_weapon = false
+var pending_armor = null
 
 func _ready():
 	_build_materials()
@@ -97,6 +98,21 @@ func set_equipped_weapon(weapon):
 			_build_mace(slots["right_weapon"])
 		_:
 			_build_sword(slots["right_weapon"])
+
+func set_equipped_armor(armor):
+	pending_armor = armor
+	if not slots.has("chest_armor"):
+		return
+	for slot_name in ["head_armor", "chest_armor", "hips_armor", "left_shoulder_armor", "right_shoulder_armor", "left_forearm_armor", "right_forearm_armor", "left_foot_armor", "right_foot_armor"]:
+		_clear_slot(slot_name)
+	if armor == null:
+		_build_deprived_look()
+	elif armor.item_id == "knight_set":
+		_build_heavy_armor()
+	elif armor.item_id == "cloth_set":
+		_build_robes()
+	else:
+		_build_leather_armor()
 
 func get_armor_slot(slot_name):
 	return slots.get(slot_name)
@@ -338,8 +354,40 @@ func _pose_death():
 func _build_sword(parent):
 	_cylinder(parent, "SwordGrip", 0.035, 0.28, Vector3(0.0, -0.10, 0.0), materials["leather"], Vector3.ZERO, 6)
 	_box(parent, "SwordGuard", Vector3(0.42, 0.055, 0.08), Vector3(0.0, -0.25, -0.01), materials["dark_metal"])
-	_box(parent, "SwordBlade", Vector3(0.075, 0.98, 0.035), Vector3(0.0, -0.76, -0.01), materials["metal"])
-	_box(parent, "SwordTip", Vector3(0.055, 0.15, 0.030), Vector3(0.0, -1.33, -0.01), materials["metal"], Vector3(0.0, 0.0, 45.0))
+	var blade = VisualLibrary.tapered(Vector2(0.0, 0.018), Vector2(0.075, 0.028), 1.12, materials["metal"], "SwordBlade")
+	VisualLibrary.add_part(parent, blade, Vector3(0.0, -0.84, -0.01))
+	_cylinder(parent, "SwordPommel", 0.065, 0.11, Vector3(0.0, 0.095, 0.0), materials["dark_metal"], Vector3.ZERO, 7)
+	_box(parent, "BladeRidge", Vector3(0.018, 0.88, 0.045), Vector3(0.0, -0.72, -0.01), materials["dark_metal"])
+
+func _build_deprived_look():
+	var wrap = VisualLibrary.tapered(Vector2(0.22,0.14),Vector2(0.25,0.16),0.22,materials["cloth"],"WaistWrap")
+	VisualLibrary.add_part(slots["hips_armor"],wrap)
+
+func _build_leather_armor():
+	var vest = VisualLibrary.tapered(Vector2(0.31,0.18),Vector2(0.23,0.16),0.58,materials["leather"],"LeatherVest")
+	VisualLibrary.add_part(slots["chest_armor"],vest,Vector3(0,0,-0.02))
+	for side in ["left", "right"]:
+		var shoulder = VisualLibrary.tapered(Vector2(0.09,0.13),Vector2(0.15,0.17),0.15,materials["dark_leather"],"LeatherShoulder")
+		VisualLibrary.add_part(slots[side + "_shoulder_armor"],shoulder)
+
+func _build_heavy_armor():
+	var cuirass = VisualLibrary.tapered(Vector2(0.34,0.20),Vector2(0.24,0.17),0.62,materials["metal"],"Cuirass")
+	VisualLibrary.add_part(slots["chest_armor"],cuirass,Vector3(0,0,-0.02))
+	var helm = VisualLibrary.tapered(Vector2(0.18,0.17),Vector2(0.16,0.15),0.38,materials["dark_metal"],"KnightHelm")
+	VisualLibrary.add_part(slots["head_armor"],helm,Vector3(0,0.02,0))
+	for side in ["left", "right"]:
+		var pauldron = VisualLibrary.tapered(Vector2(0.12,0.17),Vector2(0.20,0.22),0.18,materials["metal"],"Pauldron")
+		VisualLibrary.add_part(slots[side + "_shoulder_armor"],pauldron)
+		var vambrace = VisualLibrary.tapered(Vector2(0.08,0.09),Vector2(0.11,0.11),0.34,materials["dark_metal"],"Vambrace")
+		VisualLibrary.add_part(slots[side + "_forearm_armor"],vambrace,Vector3(0,-0.17,0))
+
+func _build_robes():
+	var robe = VisualLibrary.tapered(Vector2(0.30,0.18),Vector2(0.23,0.15),0.66,materials["cloth"],"RobeTorso")
+	VisualLibrary.add_part(slots["chest_armor"],robe)
+	var skirt = VisualLibrary.tapered(Vector2(0.24,0.16),Vector2(0.37,0.24),0.64,materials["cloth"],"RobeSkirt")
+	VisualLibrary.add_part(slots["hips_armor"],skirt,Vector3(0,-0.28,0))
+	var hood = VisualLibrary.tapered(Vector2(0.23,0.21),Vector2(0.17,0.16),0.40,materials["cloth"],"Hood")
+	VisualLibrary.add_part(slots["head_armor"],hood,Vector3(0,0.03,0.03))
 
 func _build_axe(parent):
 	_cylinder(parent, "AxeHandle", 0.038, 1.02, Vector3(0.0, -0.58, 0.0), materials["leather"], Vector3.ZERO, 6)
@@ -393,16 +441,8 @@ func _box(parent, mesh_name, size, position, material, rotation_degrees_value = 
 	return mesh_instance
 
 func _capsule(parent, mesh_name, radius, height, position, material, radial_segments = 6):
-	var mesh_instance = MeshInstance3D.new()
-	var mesh = CapsuleMesh.new()
-	mesh.radius = radius
-	mesh.height = height
-	mesh.radial_segments = radial_segments
-	mesh.rings = 2
-	mesh_instance.name = mesh_name
-	mesh_instance.mesh = mesh
+	var mesh_instance = VisualLibrary.tapered(Vector2(radius * 0.78, radius * 0.78), Vector2(radius, radius), height, material, mesh_name)
 	mesh_instance.position = position
-	mesh_instance.material_override = material
 	parent.add_child(mesh_instance)
 	return mesh_instance
 

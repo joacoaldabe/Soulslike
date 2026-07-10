@@ -26,8 +26,8 @@ var invulnerable_timer = 0.0
 func _ready():
 	add_to_group("player")
 	_setup_body()
-	_update_weapon_visual()
-	Inventory.equipment_changed.connect(_update_weapon_visual)
+	_update_equipment_visuals()
+	Inventory.equipment_changed.connect(_update_equipment_visuals)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _setup_body():
@@ -198,11 +198,12 @@ func _update_visual_state():
 	visual_model.set_roll_state(is_rolling, roll_timer)
 	visual_model.set_attack_state(is_attacking, attack_type, attack_timer, attack_duration)
 
-func _update_weapon_visual():
+func _update_equipment_visuals():
 	if visual_model == null:
 		return
 	var weapon = Inventory.get_equipped_weapon()
 	visual_model.set_equipped_weapon(weapon)
+	visual_model.set_equipped_armor(Inventory.get_equipped_armor())
 
 func _toggle_lock_target():
 	if lock_target != null and is_instance_valid(lock_target):
