@@ -6,6 +6,7 @@ var data = null
 
 func _ready():
 	add_to_group("interactable")
+	add_to_group("bonfires")
 	data = Database.get_bonfire(bonfire_id)
 	_setup_visuals()
 

@@ -303,6 +303,8 @@ func _activate_inventory_item(item_type, index):
 func toggle_inventory():
 	if not GameState.character_ready:
 		return
+	if bonfire_panel.visible or creator_panel.visible:
+		return
 	if inventory_panel.visible:
 		close_inventory()
 	else:

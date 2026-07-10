@@ -3,7 +3,7 @@ class_name VisualLibrary
 
 static var _materials := {}
 
-static func material(id: String) -> StandardMaterial3D:
+static func material(id: String) -> Material:
 	if _materials.has(id):
 		return _materials[id]
 	var colors = {
@@ -14,6 +14,10 @@ static func material(id: String) -> StandardMaterial3D:
 		"moss": Color("3f4a3b"), "skin": Color("9b7560"), "bone": Color("a59b7d"),
 		"fire": Color("ff7624"), "souls": Color("55e889")
 	}
+	if id in ["stone", "stone_light", "stone_dark", "wet_stone"]:
+		var stone = _stone_material(colors[id], id == "wet_stone")
+		_materials[id] = stone
+		return stone
 	var m = StandardMaterial3D.new()
 	m.albedo_color = colors.get(id, Color("777777"))
 	m.roughness = 0.62 if id.contains("metal") else 0.94
@@ -24,6 +28,37 @@ static func material(id: String) -> StandardMaterial3D:
 		m.emission_energy_multiplier = 2.2
 	_materials[id] = m
 	return m
+
+static func _stone_material(color: Color, wet: bool) -> ShaderMaterial:
+	var shader = Shader.new()
+	shader.code = """
+shader_type spatial;
+render_mode diffuse_burley;
+uniform vec4 base_color : source_color;
+uniform float wetness = 0.0;
+varying vec3 world_position;
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+void vertex() {
+	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+void fragment() {
+	vec2 cell = floor(world_position.xz * 1.35 + world_position.y * 0.7);
+	float grain = hash(cell);
+	float broad = sin(world_position.x * 0.45) * sin(world_position.z * 0.38) * 0.5 + 0.5;
+	float shade = 0.72 + grain * 0.16 + broad * 0.12;
+	float upward = clamp(NORMAL.y * 0.18 + 0.82, 0.68, 1.0);
+	ALBEDO = base_color.rgb * shade * upward;
+	ROUGHNESS = mix(0.96, 0.68, wetness);
+	SPECULAR = mix(0.18, 0.42, wetness);
+}
+"""
+	var material = ShaderMaterial.new()
+	material.shader = shader
+	material.set_shader_parameter("base_color", color)
+	material.set_shader_parameter("wetness", 0.65 if wet else 0.0)
+	return material
 
 static func mesh_instance(mesh: Mesh, mat: Material, node_name: String = "Mesh") -> MeshInstance3D:
 	var instance = MeshInstance3D.new()

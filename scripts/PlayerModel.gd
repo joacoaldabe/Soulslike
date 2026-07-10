@@ -39,6 +39,7 @@ var animation_time = 0.0
 var pending_weapon = null
 var has_pending_weapon = false
 var pending_armor = null
+var character_class_id := ""
 
 func _ready():
 	_build_materials()
@@ -87,17 +88,28 @@ func set_equipped_weapon(weapon):
 		has_pending_weapon = true
 		return
 	has_pending_weapon = false
-	attack_family = weapon.weapon_family if weapon != null else "sword"
 	_clear_slot("right_weapon")
+	if weapon == null:
+		return
+	attack_family = weapon.weapon_family
+	var mount = Node3D.new()
+	mount.name = "WeaponVisualMount"
+	mount.position = weapon.hand_position
+	mount.rotation_degrees = weapon.hand_rotation_degrees
+	mount.scale = weapon.hand_scale
+	slots["right_weapon"].add_child(mount)
+	if weapon.visual_scene != null:
+		mount.add_child(weapon.visual_scene.instantiate())
+		return
 	match attack_family:
 		"axe":
-			_build_axe(slots["right_weapon"])
+			_build_axe(mount)
 		"spear":
-			_build_spear(slots["right_weapon"])
+			_build_spear(mount)
 		"mace":
-			_build_mace(slots["right_weapon"])
+			_build_mace(mount)
 		_:
-			_build_sword(slots["right_weapon"])
+			_build_sword(mount)
 
 func set_equipped_armor(armor):
 	pending_armor = armor
@@ -105,14 +117,21 @@ func set_equipped_armor(armor):
 		return
 	for slot_name in ["head_armor", "chest_armor", "hips_armor", "left_shoulder_armor", "right_shoulder_armor", "left_forearm_armor", "right_forearm_armor", "left_foot_armor", "right_foot_armor"]:
 		_clear_slot(slot_name)
-	if armor == null:
+	if character_class_id == "deprived" or armor == null:
 		_build_deprived_look()
 	elif armor.item_id == "knight_set":
 		_build_heavy_armor()
+	elif character_class_id in ["warrior", "bandit"]:
+		_build_medium_armor()
+	elif character_class_id in ["sorcerer", "pyromancer", "cleric"]:
+		_build_robes()
 	elif armor.item_id == "cloth_set":
 		_build_robes()
 	else:
 		_build_leather_armor()
+
+func set_character_class(class_id: String):
+	character_class_id = class_id
 
 func get_armor_slot(slot_name):
 	return slots.get(slot_name)
@@ -142,18 +161,21 @@ func _build_materials():
 func _build_rig():
 	rig_root = _joint(self, "RigRoot", Vector3.ZERO)
 	hips = _joint(rig_root, "Hips", Vector3(0.0, 0.93, 0.0))
-	_box(hips, "Pelvis", Vector3(0.44, 0.24, 0.30), Vector3(0.0, 0.0, 0.0), materials["dark_leather"])
+	var pelvis_mesh = VisualLibrary.tapered(Vector2(0.22,0.15),Vector2(0.18,0.13),0.24,materials["dark_leather"],"Pelvis")
+	VisualLibrary.add_part(hips,pelvis_mesh)
 	_box(hips, "Belt", Vector3(0.52, 0.08, 0.34), Vector3(0.0, 0.08, -0.01), materials["leather"])
 	_box(hips, "BeltBuckle", Vector3(0.12, 0.10, 0.05), Vector3(0.0, 0.08, -0.18), materials["metal"])
 	_slot(hips, "hips_armor", Vector3(0.0, 0.03, 0.0))
 
 	spine = _joint(hips, "Spine", Vector3(0.0, 0.18, 0.0))
-	_box(spine, "Abdomen", Vector3(0.36, 0.34, 0.26), Vector3(0.0, 0.15, 0.0), materials["cloth"])
+	var abdomen_mesh = VisualLibrary.tapered(Vector2(0.21,0.145),Vector2(0.17,0.12),0.34,materials["cloth"],"Abdomen")
+	VisualLibrary.add_part(spine,abdomen_mesh,Vector3(0,0.15,0))
 	_box(spine, "FrontStrap", Vector3(0.09, 0.42, 0.04), Vector3(-0.08, 0.19, -0.15), materials["leather"], Vector3(0.0, 0.0, 14.0))
 	_box(spine, "SideStrap", Vector3(0.09, 0.42, 0.04), Vector3(0.10, 0.19, -0.15), materials["leather"], Vector3(0.0, 0.0, -14.0))
 
 	chest = _joint(spine, "Chest", Vector3(0.0, 0.42, 0.0))
-	_box(chest, "ChestPlate", Vector3(0.58, 0.44, 0.32), Vector3(0.0, 0.12, 0.0), materials["dark_metal"])
+	var chest_mesh = VisualLibrary.tapered(Vector2(0.31,0.18),Vector2(0.22,0.145),0.44,materials["dark_metal"],"ChestPlate")
+	VisualLibrary.add_part(chest,chest_mesh,Vector3(0,0.12,0))
 	_box(chest, "ChestCloth", Vector3(0.46, 0.36, 0.04), Vector3(0.0, 0.11, -0.19), materials["cloth"])
 	_box(chest, "BackHarness", Vector3(0.50, 0.10, 0.04), Vector3(0.0, 0.20, 0.19), materials["leather"])
 	_slot(chest, "chest_armor", Vector3(0.0, 0.12, -0.19))
@@ -185,7 +207,8 @@ func _build_arm(prefix, parent, side):
 	_capsule(forearm, prefix + "ForearmMesh", 0.075, 0.38, Vector3(0.0, -0.19, 0.0), materials["leather"], 6)
 	_slot(forearm, prefix.to_lower() + "_forearm_armor", Vector3(0.0, -0.17, 0.0))
 	var hand = _joint(forearm, prefix + "Hand", Vector3(0.0, -0.38, -0.02))
-	_box(hand, prefix + "HandMesh", Vector3(0.12, 0.10, 0.13), Vector3(0.0, -0.03, -0.02), materials["skin"])
+	var hand_mesh = VisualLibrary.tapered(Vector2(0.045,0.055),Vector2(0.06,0.07),0.13,materials["skin"],prefix + "HandMesh")
+	VisualLibrary.add_part(hand,hand_mesh,Vector3(0,-0.04,-0.02))
 	_slot(hand, prefix.to_lower() + "_hand_armor", Vector3(0.0, -0.02, -0.02))
 	if side > 0.0:
 		_slot(hand, "right_weapon", Vector3(0.0, -0.05, -0.04), Vector3(0.0, 0.0, -8.0))
@@ -207,7 +230,8 @@ func _build_leg(prefix, parent, side):
 	_capsule(shin, prefix + "ShinMesh", 0.085, 0.45, Vector3(0.0, -0.22, 0.0), materials["dark_leather"], 6)
 	_slot(shin, prefix.to_lower() + "_shin_armor", Vector3(0.0, -0.18, 0.0))
 	var foot = _joint(shin, prefix + "Foot", Vector3(0.0, -0.43, -0.07))
-	_box(foot, prefix + "Boot", Vector3(0.17, 0.10, 0.30), Vector3(0.0, -0.02, -0.08), materials["dark_leather"])
+	var boot_mesh = VisualLibrary.tapered(Vector2(0.07,0.12),Vector2(0.085,0.16),0.16,materials["dark_leather"],prefix + "Boot")
+	VisualLibrary.add_part(foot,boot_mesh,Vector3(0,-0.02,-0.09),Vector3(90,0,0))
 	_slot(foot, prefix.to_lower() + "_foot_armor", Vector3(0.0, -0.02, -0.08))
 	if side < 0.0:
 		left_shin = shin
@@ -375,11 +399,26 @@ func _build_heavy_armor():
 	VisualLibrary.add_part(slots["chest_armor"],cuirass,Vector3(0,0,-0.02))
 	var helm = VisualLibrary.tapered(Vector2(0.18,0.17),Vector2(0.16,0.15),0.38,materials["dark_metal"],"KnightHelm")
 	VisualLibrary.add_part(slots["head_armor"],helm,Vector3(0,0.02,0))
+	var visor = VisualLibrary.box(Vector3(0.28,0.055,0.035),materials["dark_leather"],"VisorSlit")
+	VisualLibrary.add_part(slots["head_armor"],visor,Vector3(0,0.07,-0.18))
+	var nose_guard = VisualLibrary.tapered(Vector2(0.025,0.018),Vector2(0.04,0.025),0.22,materials["metal"],"NoseGuard")
+	VisualLibrary.add_part(slots["head_armor"],nose_guard,Vector3(0,-0.02,-0.20))
 	for side in ["left", "right"]:
 		var pauldron = VisualLibrary.tapered(Vector2(0.12,0.17),Vector2(0.20,0.22),0.18,materials["metal"],"Pauldron")
 		VisualLibrary.add_part(slots[side + "_shoulder_armor"],pauldron)
 		var vambrace = VisualLibrary.tapered(Vector2(0.08,0.09),Vector2(0.11,0.11),0.34,materials["dark_metal"],"Vambrace")
 		VisualLibrary.add_part(slots[side + "_forearm_armor"],vambrace,Vector3(0,-0.17,0))
+
+func _build_medium_armor():
+	var brigandine = VisualLibrary.tapered(Vector2(0.32,0.19),Vector2(0.24,0.16),0.60,materials["leather"],"Brigandine")
+	VisualLibrary.add_part(slots["chest_armor"],brigandine,Vector3(0,0,-0.02))
+	for y in [-0.16,0.0,0.16]:
+		var plate = VisualLibrary.box(Vector3(0.48,0.07,0.035),materials["dark_metal"],"BrigandinePlate")
+		VisualLibrary.add_part(slots["chest_armor"],plate,Vector3(0,y,-0.20))
+	var pauldron = VisualLibrary.tapered(Vector2(0.12,0.16),Vector2(0.19,0.21),0.17,materials["dark_metal"],"WarriorPauldron")
+	VisualLibrary.add_part(slots["right_shoulder_armor"],pauldron)
+	var skirt = VisualLibrary.tapered(Vector2(0.24,0.16),Vector2(0.32,0.21),0.36,materials["cloth"],"BattleSkirt")
+	VisualLibrary.add_part(slots["hips_armor"],skirt,Vector3(0,-0.16,0))
 
 func _build_robes():
 	var robe = VisualLibrary.tapered(Vector2(0.30,0.18),Vector2(0.23,0.15),0.66,materials["cloth"],"RobeTorso")

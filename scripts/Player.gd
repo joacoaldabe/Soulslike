@@ -201,12 +201,15 @@ func _update_visual_state():
 func _update_equipment_visuals():
 	if visual_model == null:
 		return
+	visual_model.set_character_class(GameState.class_id)
 	var weapon = Inventory.get_equipped_weapon()
 	visual_model.set_equipped_weapon(weapon)
 	visual_model.set_equipped_armor(Inventory.get_equipped_armor())
 
 func _toggle_lock_target():
 	if lock_target != null and is_instance_valid(lock_target):
+		if lock_target.has_method("set_lock_targeted"):
+			lock_target.set_lock_targeted(false)
 		lock_target = null
 		return
 	var best = null
@@ -217,9 +220,12 @@ func _toggle_lock_target():
 			best = enemy
 			best_distance = distance
 	lock_target = best
+	if lock_target != null and lock_target.has_method("set_lock_targeted"):
+		lock_target.set_lock_targeted(true)
 
 func _update_lock_rotation(delta):
 	if lock_target == null or not is_instance_valid(lock_target):
+		lock_target = null
 		return
 	var target = lock_target.global_position
 	target.y = global_position.y

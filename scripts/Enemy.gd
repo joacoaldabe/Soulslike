@@ -85,7 +85,17 @@ func take_damage(amount, _source):
 	if health <= 0:
 		_die()
 
+func set_lock_targeted(value: bool):
+	if visual_model != null:
+		visual_model.set_targeted(value)
+
 func _die():
+	set_physics_process(false)
+	collision_layer = 0
+	collision_mask = 0
+	if visual_model != null:
+		visual_model.set_targeted(false)
+		visual_model.play_death()
 	GameState.add_souls(data.souls_reward)
 	for index in range(data.drop_ids.size()):
 		var chance = 0.0
@@ -97,4 +107,5 @@ func _die():
 			var item = Database.get_item(item_id)
 			if item != null:
 				get_tree().call_group("ui", "notify", "Obtuviste %s." % item.display_name)
+	await get_tree().create_timer(0.45).timeout
 	queue_free()
