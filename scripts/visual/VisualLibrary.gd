@@ -66,7 +66,7 @@ static func tapered(top: Vector2, bottom: Vector2, height: float, mat: Material,
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh_instance(mesh, mat, node_name)
 
-static func add_part(parent: Node, part: Node3D, position := Vector3.ZERO, rotation := Vector3.ZERO) -> Node3D:
+static func add_part(parent: Node, part: Node3D, position: Vector3 = Vector3.ZERO, rotation: Vector3 = Vector3.ZERO) -> Node3D:
 	part.position = position
 	part.rotation_degrees = rotation
 	parent.add_child(part)
