@@ -1,0 +1,18 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/WeaponData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+item_id = "longsword"
+display_name = "Longsword"
+description = "Espada recta de golpes rapidos y arco amplio."
+weapon_family = "sword"
+base_damage = 52
+light_stamina_cost = 18
+heavy_stamina_cost = 32
+requirements = {"dexterity": 10, "strength": 10}
+scaling = {"dexterity": "C", "strength": "C"}
+attack_reach = 2.0
+attack_arc = 95.0
+attack_time = 0.42

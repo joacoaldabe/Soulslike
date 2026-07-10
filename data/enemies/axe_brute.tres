@@ -1,0 +1,18 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/EnemyData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+enemy_id = "axe_brute"
+display_name = "Axe Brute"
+max_health = 190
+damage = 34
+souls_reward = 180
+move_speed = 1.75
+aggro_range = 8.0
+attack_range = 1.8
+attack_cooldown = 1.9
+moveset = "brute"
+drop_ids = ["battle_axe", "knight_set"]
+drop_chances = [0.16, 0.08]

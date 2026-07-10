@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/CharacterClassData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+class_id = "knight"
+display_name = "Knight"
+description = "Clase resistente con armadura pesada y buena vida."
+level = 5
+attributes = {"attunement": 10, "dexterity": 11, "endurance": 10, "faith": 11, "intelligence": 9, "resistance": 10, "strength": 11, "vitality": 14}
+starting_weapon = "longsword"
+starting_armor = "knight_set"
+starting_ring = "life_ring"
+starting_items = ["green_estus"]

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/CharacterClassData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+class_id = "deprived"
+display_name = "Deprived"
+description = "Inicio parejo, sin ventajas claras."
+level = 6
+attributes = {"attunement": 11, "dexterity": 11, "endurance": 11, "faith": 11, "intelligence": 11, "resistance": 11, "strength": 11, "vitality": 11}
+starting_weapon = "mace"
+starting_armor = "cloth_set"
+starting_ring = ""
+starting_items = ["green_estus"]

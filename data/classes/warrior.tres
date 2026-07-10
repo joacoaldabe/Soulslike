@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/CharacterClassData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+class_id = "warrior"
+display_name = "Warrior"
+description = "Combatiente equilibrado con buena fuerza y destreza."
+level = 4
+attributes = {"attunement": 8, "dexterity": 13, "endurance": 12, "faith": 9, "intelligence": 9, "resistance": 11, "strength": 13, "vitality": 11}
+starting_weapon = "longsword"
+starting_armor = "leather_set"
+starting_ring = ""
+starting_items = ["green_estus", "soul_shard"]

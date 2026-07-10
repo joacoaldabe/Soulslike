@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/CharacterClassData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+class_id = "wanderer"
+display_name = "Wanderer"
+description = "Duelista agil que aprovecha armas rapidas."
+level = 3
+attributes = {"attunement": 11, "dexterity": 14, "endurance": 10, "faith": 8, "intelligence": 11, "resistance": 12, "strength": 10, "vitality": 10}
+starting_weapon = "longsword"
+starting_armor = "cloth_set"
+starting_ring = "stamina_ring"
+starting_items = ["green_estus"]

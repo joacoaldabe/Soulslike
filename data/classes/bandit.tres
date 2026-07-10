@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/CharacterClassData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+class_id = "bandit"
+display_name = "Bandit"
+description = "Bruto de alta fuerza, ideal para hachas."
+level = 4
+attributes = {"attunement": 8, "dexterity": 10, "endurance": 14, "faith": 8, "intelligence": 8, "resistance": 11, "strength": 14, "vitality": 12}
+starting_weapon = "battle_axe"
+starting_armor = "leather_set"
+starting_ring = ""
+starting_items = ["green_estus"]

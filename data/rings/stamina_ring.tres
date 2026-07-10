@@ -1,0 +1,12 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/RingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+item_id = "stamina_ring"
+display_name = "Stamina Ring"
+description = "Aumenta Endurance."
+vitality_bonus = 0
+endurance_bonus = 3
+defense_bonus = 0

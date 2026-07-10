@@ -1,0 +1,18 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/WeaponData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+item_id = "winged_spear"
+display_name = "Winged Spear"
+description = "Lanza de estocada con gran alcance y arco reducido."
+weapon_family = "spear"
+base_damage = 48
+light_stamina_cost = 20
+heavy_stamina_cost = 34
+requirements = {"dexterity": 13, "strength": 10}
+scaling = {"dexterity": "B", "strength": "D"}
+attack_reach = 2.8
+attack_arc = 36.0
+attack_time = 0.46

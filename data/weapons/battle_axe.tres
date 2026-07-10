@@ -1,0 +1,18 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/WeaponData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+item_id = "battle_axe"
+display_name = "Battle Axe"
+description = "Hacha pesada con ataques mas lentos y fuertes."
+weapon_family = "axe"
+base_damage = 70
+light_stamina_cost = 26
+heavy_stamina_cost = 42
+requirements = {"strength": 14}
+scaling = {"strength": "A", "dexterity": "E"}
+attack_reach = 1.85
+attack_arc = 70.0
+attack_time = 0.62

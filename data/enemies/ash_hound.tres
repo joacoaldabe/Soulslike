@@ -1,0 +1,18 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/EnemyData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+enemy_id = "ash_hound"
+display_name = "Ash Hound"
+max_health = 90
+damage = 18
+souls_reward = 70
+move_speed = 3.4
+aggro_range = 11.0
+attack_range = 1.25
+attack_cooldown = 1.0
+moveset = "hound"
+drop_ids = ["green_estus", "soul_shard"]
+drop_chances = [0.22, 0.12]

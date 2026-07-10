@@ -1,0 +1,18 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/WeaponData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+item_id = "mace"
+display_name = "Mace"
+description = "Maza simple de impacto, buena contra enemigos lentos."
+weapon_family = "mace"
+base_damage = 58
+light_stamina_cost = 22
+heavy_stamina_cost = 36
+requirements = {"strength": 9}
+scaling = {"faith": "D", "strength": "B"}
+attack_reach = 1.7
+attack_arc = 75.0
+attack_time = 0.52

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/EnemyData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+enemy_id = "hollow_sword"
+display_name = "Hollow Sword"
+max_health = 115
+damage = 23
+souls_reward = 90
+move_speed = 2.5
+aggro_range = 9.0
+attack_range = 1.45
+attack_cooldown = 1.35
+moveset = "sword"
+drop_ids = ["longsword", "leather_set"]
+drop_chances = [0.18, 0.10]

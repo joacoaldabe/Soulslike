@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/CharacterClassData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+class_id = "cleric"
+display_name = "Cleric"
+description = "Devoto resistente que usa mazas con buen escalado en fe."
+level = 2
+attributes = {"attunement": 11, "dexterity": 8, "endurance": 9, "faith": 14, "intelligence": 8, "resistance": 11, "strength": 12, "vitality": 11}
+starting_weapon = "mace"
+starting_armor = "leather_set"
+starting_ring = "life_ring"
+starting_items = ["green_estus"]
