@@ -21,9 +21,11 @@ var travel_option = null
 var level_attribute_option = null
 var level_cost_label = null
 var notification_label = null
+var visual_theme: Theme = null
 
 func _ready():
 	add_to_group("ui")
+	_apply_visual_theme()
 	_build_creator()
 	_build_hud()
 	_build_inventory()
@@ -39,8 +41,46 @@ func _ready():
 	_refresh_hud()
 	_refresh_inventory()
 
+func _apply_visual_theme():
+	var theme = Theme.new()
+	theme.default_font_size = 17
+	var panel = StyleBoxFlat.new()
+	panel.bg_color = Color(0.055,0.065,0.075,0.94)
+	panel.border_color = Color(0.34,0.31,0.26,0.9)
+	panel.set_border_width_all(1)
+	panel.corner_radius_top_left = 3
+	panel.corner_radius_top_right = 3
+	panel.corner_radius_bottom_left = 3
+	panel.corner_radius_bottom_right = 3
+	panel.content_margin_left = 18
+	panel.content_margin_right = 18
+	panel.content_margin_top = 14
+	panel.content_margin_bottom = 14
+	theme.set_stylebox("panel", "PanelContainer", panel)
+	var button = panel.duplicate()
+	button.bg_color = Color(0.12,0.13,0.14,0.96)
+	theme.set_stylebox("normal", "Button", button)
+	var hover = button.duplicate()
+	hover.bg_color = Color(0.25,0.22,0.17,0.98)
+	hover.border_color = Color(0.72,0.57,0.33,1.0)
+	theme.set_stylebox("hover", "Button", hover)
+	var health_fill = StyleBoxFlat.new()
+	health_fill.bg_color = Color("8f3038")
+	var stamina_fill = StyleBoxFlat.new()
+	stamina_fill.bg_color = Color("4b8c58")
+	var bar_bg = StyleBoxFlat.new()
+	bar_bg.bg_color = Color(0.04,0.045,0.05,0.9)
+	bar_bg.border_color = Color(0.24,0.25,0.24,1)
+	bar_bg.set_border_width_all(1)
+	theme.set_stylebox("background", "ProgressBar", bar_bg)
+	theme.set_color("font_color", "Label", Color("d8d2c2"))
+	visual_theme = theme
+	set_meta("health_fill", health_fill)
+	set_meta("stamina_fill", stamina_fill)
+
 func _build_creator():
 	creator_panel = PanelContainer.new()
+	creator_panel.theme = visual_theme
 	creator_panel.name = "CharacterCreator"
 	creator_panel.set_anchors_preset(Control.PRESET_CENTER)
 	creator_panel.custom_minimum_size = Vector2(520, 520)
@@ -73,6 +113,7 @@ func _build_creator():
 
 func _build_hud():
 	hud = VBoxContainer.new()
+	hud.theme = visual_theme
 	hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	hud.position = Vector2(16, 16)
 	hud.custom_minimum_size = Vector2(300, 0)
@@ -82,12 +123,14 @@ func _build_hud():
 	health_bar = ProgressBar.new()
 	health_bar.show_percentage = false
 	health_bar.custom_minimum_size = Vector2(280, 20)
+	health_bar.add_theme_stylebox_override("fill", get_meta("health_fill"))
 	hud.add_child(health_bar)
 	stamina_label = Label.new()
 	hud.add_child(stamina_label)
 	stamina_bar = ProgressBar.new()
 	stamina_bar.show_percentage = false
 	stamina_bar.custom_minimum_size = Vector2(280, 20)
+	stamina_bar.add_theme_stylebox_override("fill", get_meta("stamina_fill"))
 	hud.add_child(stamina_bar)
 	souls_label = Label.new()
 	hud.add_child(souls_label)
@@ -97,6 +140,7 @@ func _build_hud():
 
 func _build_inventory():
 	inventory_panel = PanelContainer.new()
+	inventory_panel.theme = visual_theme
 	inventory_panel.set_anchors_preset(Control.PRESET_CENTER)
 	inventory_panel.custom_minimum_size = Vector2(620, 440)
 	add_child(inventory_panel)
@@ -130,6 +174,7 @@ func _build_inventory():
 
 func _build_bonfire_menu():
 	bonfire_panel = PanelContainer.new()
+	bonfire_panel.theme = visual_theme
 	bonfire_panel.set_anchors_preset(Control.PRESET_CENTER)
 	bonfire_panel.custom_minimum_size = Vector2(430, 360)
 	add_child(bonfire_panel)
@@ -169,6 +214,7 @@ func _build_bonfire_menu():
 
 func _build_notifications():
 	notification_label = Label.new()
+	notification_label.theme = visual_theme
 	notification_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	notification_label.position = Vector2(16, -56)
 	notification_label.custom_minimum_size = Vector2(650, 40)
@@ -212,11 +258,11 @@ func _refresh_hud():
 		return
 	health_bar.max_value = GameState.max_health
 	health_bar.value = GameState.health
-	health_label.text = "HP %d / %d" % [GameState.health, GameState.max_health]
+	health_label.text = "VIDA"
 	stamina_bar.max_value = GameState.max_stamina
 	stamina_bar.value = GameState.stamina
-	stamina_label.text = "Stamina %d / %d" % [GameState.stamina, GameState.max_stamina]
-	souls_label.text = "Souls: %d | Nivel: %d | Costo: %d" % [GameState.souls, GameState.level, GameState.get_level_cost()]
+	stamina_label.text = "ENERGIA"
+	souls_label.text = "%d souls    Nivel %d" % [GameState.souls, GameState.level]
 	var weapon = Inventory.get_equipped_weapon()
 	weapon_label.text = "Arma: %s" % (weapon.display_name if weapon != null else "Sin arma")
 	if level_cost_label != null:
