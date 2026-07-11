@@ -47,6 +47,7 @@ var pending_weapon = null
 var has_pending_weapon = false
 var pending_armor = null
 var character_class_id := ""
+var roll_floor_y := 0.0
 
 func _ready():
 	_build_materials()
@@ -59,7 +60,7 @@ func _ready():
 func _process(delta):
 	animation_time += delta
 	hit_timer = max(0.0, hit_timer - delta)
-	_pose_model()
+	_pose_model(delta)
 
 func set_locomotion(amount, running):
 	locomotion_amount = clamp(amount, 0.0, 1.0)
@@ -93,6 +94,8 @@ func play_death():
 	action_kind = "dead"
 
 func set_action_phase(kind: String, phase: String, progress: float):
+	if kind == "roll" and action_kind != "roll":
+		roll_floor_y = _get_lowest_body_y()
 	action_kind = kind
 	action_phase = phase
 	action_progress = clamp(progress, 0.0, 1.0)
@@ -261,7 +264,11 @@ func _build_leg(prefix, parent, side):
 		right_foot = foot
 	return thigh
 
-func _pose_model():
+func _pose_model(delta := 0.0):
+	var previous_transforms := {}
+	if delta > 0.0 and (action_kind == "roll" or is_rolling):
+		for joint in _roll_pose_joints():
+			previous_transforms[joint] = joint.transform
 	_pose_base()
 	if death_pose:
 		_pose_death()
@@ -277,6 +284,17 @@ func _pose_model():
 		_pose_idle()
 	if hit_timer > 0.0 and not death_pose:
 		_pose_hit()
+	if not previous_transforms.is_empty():
+		var blend = 1.0 - exp(-22.0 * delta)
+		for joint in previous_transforms:
+			joint.transform = previous_transforms[joint].interpolate_with(joint.transform, blend)
+
+func _roll_pose_joints() -> Array:
+	return [rig_root, hips, spine, chest, neck, head,
+		left_shoulder, left_forearm, left_hand,
+		right_shoulder, right_forearm, right_hand,
+		left_thigh, left_shin, left_foot,
+		right_thigh, right_shin, right_foot]
 
 func _pose_base():
 	rig_root.position = Vector3.ZERO
@@ -335,53 +353,84 @@ func _pose_roll():
 	var side_roll = abs(roll_local_direction.x) > abs(roll_local_direction.z)
 	var forward_sign = 1.0 if roll_local_direction.z <= 0.0 else -1.0
 	var angle := 0.0
+	var ground_clearance := 0.0
 	match action_phase:
 		"prepare":
 			var prep = p * p * (3.0 - 2.0 * p)
 			hips.position.y = lerp(0.93, 0.66, prep)
-			chest.rotation.x = -0.52 * prep
-			left_thigh.rotation.x = 0.45 * prep
-			right_thigh.rotation.x = 0.45 * prep
+			chest.rotation.x = -0.64 * prep
+			head.rotation.x = 0.16 * prep
+			left_thigh.rotation.x = 0.34 * prep
+			right_thigh.rotation.x = 0.34 * prep
 		"impulse":
-			angle = p * PI * 0.35
-			_apply_roll_tuck(lerp(0.75, 1.0, p), angle, side_roll, forward_sign)
+			var launch = 1.0 - pow(1.0 - p, 3.0)
+			angle = launch * PI * 0.46
+			ground_clearance = lerp(0.12, 0.82, launch)
+			_apply_roll_tuck(lerp(0.04, 0.16, launch), angle, side_roll, forward_sign)
 		"invulnerable":
-			angle = PI * 0.35 + p * PI * 1.25
-			_apply_roll_tuck(sin(p * PI), angle, side_roll, forward_sign)
+			var curl_in = smoothstep(0.14, 0.42, p)
+			var tuck = lerp(0.16, 1.0, curl_in)
+			var spin = p * p * (3.0 - 2.0 * p)
+			angle = PI * lerp(0.46, 1.30, spin)
+			ground_clearance = 0.82 + sin(p * PI) * 0.28
+			_apply_roll_tuck(tuck, angle, side_roll, forward_sign)
 		"travel":
-			angle = PI * 1.60 + p * PI * 0.40
-			_apply_roll_tuck(1.0 - p * 0.45, angle, side_roll, forward_sign)
+			var release = smoothstep(0.42, 1.0, p)
+			angle = PI * lerp(1.30, 2.0, p * p * (3.0 - 2.0 * p))
+			ground_clearance = lerp(0.82, 0.0, smoothstep(0.0, 0.38, p))
+			_apply_roll_tuck(lerp(1.0, 0.08, release), angle, side_roll, forward_sign)
 		"landing":
-			var settle = 1.0 - p * p * (3.0 - 2.0 * p)
-			hips.position.y = lerp(0.93, 0.70, settle)
-			chest.rotation.x = -0.42 * settle
-			left_thigh.rotation.x = 0.40 * settle
-			right_thigh.rotation.x = 0.40 * settle
+			var settle = p * p * (3.0 - 2.0 * p)
+			angle = TAU
+			_apply_roll_tuck(lerp(0.18, 0.04, settle), angle, side_roll, forward_sign)
 		"recovery":
 			var recover = 1.0 - p * p * (3.0 - 2.0 * p)
 			hips.position.y = lerp(0.93, 0.82, recover)
-			chest.rotation.x = -0.18 * recover
-			left_thigh.rotation.x = 0.16 * recover
-			right_thigh.rotation.x = 0.16 * recover
+			chest.rotation.x = -0.24 * recover
+			left_thigh.rotation.x = 0.18 * recover
+			right_thigh.rotation.x = 0.18 * recover
 		_:
 			pass
+	_keep_roll_above_floor(ground_clearance)
 
 func _apply_roll_tuck(tuck: float, angle: float, side_roll: bool, forward_sign: float):
-	hips.position.y = 0.62 + tuck * 0.06
+	hips.position.y = 0.58 + tuck * 0.03
 	if side_roll:
 		rig_root.rotation.z = -sign(roll_local_direction.x) * angle
 	else:
 		rig_root.rotation.x = -forward_sign * angle
-	chest.rotation.x += -0.72 * tuck
-	head.rotation.x = 0.42 * tuck
-	left_shoulder.rotation_degrees = Vector3(-100.0 * tuck, 0.0, -32.0)
-	right_shoulder.rotation_degrees = Vector3(-100.0 * tuck, 0.0, 32.0)
-	left_forearm.rotation_degrees = Vector3(-92.0 * tuck, 0.0, 0.0)
-	right_forearm.rotation_degrees = Vector3(-92.0 * tuck, 0.0, 0.0)
-	left_thigh.rotation_degrees = Vector3(70.0 * tuck, 0.0, -7.0)
-	right_thigh.rotation_degrees = Vector3(70.0 * tuck, 0.0, 7.0)
-	left_shin.rotation_degrees = Vector3(-96.0 * tuck, 0.0, 0.0)
-	right_shin.rotation_degrees = Vector3(-96.0 * tuck, 0.0, 0.0)
+	chest.rotation.x += -0.78 * tuck
+	head.rotation.x = 0.46 * tuck
+	left_shoulder.rotation_degrees = Vector3(72.0 * tuck, 0.0, -34.0)
+	right_shoulder.rotation_degrees = Vector3(72.0 * tuck, 0.0, 34.0)
+	left_forearm.rotation_degrees = Vector3(-142.0 * tuck, 0.0, 0.0)
+	right_forearm.rotation_degrees = Vector3(-142.0 * tuck, 0.0, 0.0)
+	left_thigh.rotation_degrees = Vector3(136.0 * tuck, 0.0, -9.0)
+	right_thigh.rotation_degrees = Vector3(136.0 * tuck, 0.0, 9.0)
+	left_shin.rotation_degrees = Vector3(92.0 * tuck, 0.0, 0.0)
+	right_shin.rotation_degrees = Vector3(92.0 * tuck, 0.0, 0.0)
+
+func _keep_roll_above_floor(clearance := 0.0):
+	var lowest = _get_lowest_body_y()
+	var target_y = roll_floor_y + clearance
+	if lowest < target_y:
+		rig_root.position.y += target_y - lowest
+
+func _get_lowest_body_y() -> float:
+	var lowest := INF
+	var right_weapon_slot = slots.get("right_weapon")
+	var left_weapon_slot = slots.get("left_weapon")
+	for node in find_children("*", "MeshInstance3D", true, false):
+		if right_weapon_slot != null and right_weapon_slot.is_ancestor_of(node):
+			continue
+		if left_weapon_slot != null and left_weapon_slot.is_ancestor_of(node):
+			continue
+		var bounds = node.get_aabb()
+		for x in [bounds.position.x, bounds.end.x]:
+			for y in [bounds.position.y, bounds.end.y]:
+				for z in [bounds.position.z, bounds.end.z]:
+					lowest = min(lowest, (node.global_transform * Vector3(x,y,z)).y)
+	return lowest
 
 func _pose_attack():
 	var p = action_progress if action_kind == "attack" else clamp(1.0 - attack_timer / attack_duration, 0.0, 1.0)
@@ -418,14 +467,28 @@ func _pose_attack():
 			right_forearm.rotation_degrees = Vector3(-72.0 + impact * 38.0, 0.0, lerp(-18.0, 30.0, progress))
 			left_shoulder.rotation_degrees = Vector3(-35.0, 0.0, -28.0)
 		_:
-			chest.rotation.y = lerp(-0.42, 0.48, progress) * heavy
-			right_shoulder.rotation_degrees = Vector3(lerp(-76.0, 38.0, progress), lerp(-28.0, 34.0, progress), lerp(-68.0, 76.0, progress))
-			right_forearm.rotation_degrees = Vector3(-32.0, 0.0, lerp(-24.0, 34.0, progress))
-			left_shoulder.rotation_degrees = Vector3(-28.0, 0.0, -25.0)
+			var eased = p * p * (3.0 - 2.0 * p)
+			match action_phase:
+				"windup":
+					chest.rotation.y = lerp(0.0, -0.30, eased) * heavy
+					right_shoulder.rotation_degrees = Vector3(lerp(8.0,68.0,eased),0.0,lerp(12.0,52.0,eased))
+					right_forearm.rotation_degrees = Vector3(lerp(-4.0,28.0,eased),0.0,lerp(2.0,-12.0,eased))
+				"active":
+					var strike = 1.0 - pow(1.0 - p, 3.0)
+					chest.rotation.y = lerp(-0.30,0.38,strike) * heavy
+					right_shoulder.rotation_degrees = Vector3(lerp(70.0,98.0,strike),0.0,lerp(52.0,-52.0,strike))
+					right_forearm.rotation_degrees = Vector3(32.0,0.0,lerp(-12.0,20.0,strike))
+				"recovery":
+					chest.rotation.y = lerp(0.38,0.0,eased) * heavy
+					right_shoulder.rotation_degrees = Vector3(lerp(98.0,5.0,eased),0.0,lerp(-52.0,7.0,eased))
+					right_forearm.rotation_degrees = Vector3(lerp(32.0,-4.0,eased),0.0,lerp(20.0,3.0,eased))
+				_:
+					pass
+			left_shoulder.rotation_degrees = Vector3(-28.0,0.0,-25.0)
 	right_hand.rotation.z = -0.25 * impact
 	left_thigh.rotation.x = -0.12 * impact
 	right_thigh.rotation.x = 0.12 * impact
-	if action_phase == "recovery":
+	if action_phase == "recovery" and attack_family != "sword":
 		chest.rotation *= recovery_weight
 		right_shoulder.rotation *= recovery_weight
 		right_forearm.rotation *= recovery_weight

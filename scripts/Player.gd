@@ -2,7 +2,7 @@ extends CharacterBody3D
 
 const WALK_SPEED = 4.0
 const RUN_SPEED = 6.5
-const ROLL_SPEED = 10.0
+const ROLL_SPEED = 11.0
 const GRAVITY = 24.0
 const STAMINA_REGEN = 28.0
 const RUN_STAMINA_PER_SECOND = 12.0
@@ -259,10 +259,10 @@ func _start_roll():
 	is_rolling = true
 	is_attacking = false
 	action.begin("roll", [
-		{"name":"prepare", "duration":0.05, "allow_rotation":true, "allow_movement":false, "invulnerable":false, "interruptible":false},
-		{"name":"impulse", "duration":0.035, "allow_rotation":false, "allow_movement":true, "invulnerable":false, "interruptible":false},
-		{"name":"invulnerable", "duration":0.235, "allow_rotation":false, "allow_movement":true, "invulnerable":true, "interruptible":false},
-		{"name":"travel", "duration":0.15, "allow_rotation":false, "allow_movement":true, "invulnerable":false, "interruptible":false},
+		{"name":"prepare", "duration":0.065, "allow_rotation":true, "allow_movement":false, "invulnerable":false, "interruptible":false},
+		{"name":"impulse", "duration":0.065, "allow_rotation":false, "allow_movement":true, "invulnerable":false, "interruptible":false},
+		{"name":"invulnerable", "duration":0.33, "allow_rotation":false, "allow_movement":true, "invulnerable":true, "interruptible":false},
+		{"name":"travel", "duration":0.14, "allow_rotation":false, "allow_movement":true, "invulnerable":false, "interruptible":false},
 		{"name":"landing", "duration":0.10, "allow_rotation":false, "allow_movement":true, "invulnerable":false, "interruptible":false},
 		{"name":"recovery", "duration":0.06, "allow_rotation":false, "allow_movement":false, "invulnerable":false, "interruptible":false}
 	])

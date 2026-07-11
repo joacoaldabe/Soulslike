@@ -190,7 +190,7 @@ func _run():
 	_expect(forward_roll.dot(Vector3.FORWARD) > 0.95, "10 forward roll follows input")
 	_expect(player.action.phases.size() == 6, "10 roll exposes prepare, impulse, i-frames, travel, landing and recovery")
 	await _wait_for_action(player)
-	_expect((player.global_position - origin).dot(forward_roll) > 2.5, "10 roll produces continuous physical displacement")
+	_expect((player.global_position - origin).dot(forward_roll) > 3.0, "10 roll produces the extended physical displacement")
 
 	await _reset_player()
 	var roll_target = _spawn_enemy("hollow_sword", Vector3(0, 0, -3))

@@ -90,7 +90,7 @@ func _run():
 	game_state.stamina = game_state.max_stamina
 	player._start_roll()
 	_expect(player.is_rolling, "roll starts and consumes stamina")
-	await create_timer(0.72).timeout
+	await create_timer(0.80).timeout
 
 	player._toggle_lock_target()
 	_expect(player.lock_target != null, "lock-on selects an enemy")

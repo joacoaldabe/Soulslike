@@ -91,7 +91,7 @@ func _run():
 	var pre_iframe_hit = CombatHit.new(null,5,0,Vector3.FORWARD,player.global_position,0,"light",101)
 	player.receive_hit(pre_iframe_hit)
 	_expect(game_state.health < health_before, "damage applies before roll i-frames")
-	await create_timer(0.10).timeout
+	await create_timer(0.15).timeout
 	health_before = game_state.health
 	var iframe_hit = CombatHit.new(null,8,0,Vector3.FORWARD,player.global_position,0,"light",102)
 	player.receive_hit(iframe_hit)
