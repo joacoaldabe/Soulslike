@@ -3,20 +3,38 @@ extends CharacterBody3D
 const GRAVITY = 24.0
 
 @export var enemy_id = "hollow_sword"
+@export var combat_debug := false
 
 var data = null
-var health = 1
-var attack_cooldown = 0.0
+var health := 1
 var visual_model: EnemyModel = null
+var debug_label: Label3D = null
+var action := CombatAction.new()
+var state := "idle"
+var attack_cooldown := 0.0
+var attack_direction := Vector3.FORWARD
+var attack_has_hit := false
+var attack_sequence := 0
+var current_attack_id := 0
+var is_dead := false
+var max_poise := 1.0
+var poise := 1.0
+var poise_recovery_timer := 0.0
+var stagger_immunity_timer := 0.0
+var received_attack_ids := {}
 
 func _ready():
 	add_to_group("enemies")
+	collision_layer = 4
+	collision_mask = 1 | 2 | 4
 	data = Database.get_enemy(enemy_id)
 	if data == null:
 		push_warning("Missing enemy data: %s" % enemy_id)
 		queue_free()
 		return
 	health = data.max_health
+	max_poise = data.max_poise
+	poise = max_poise
 	_setup_visuals()
 
 func _setup_visuals():
@@ -33,63 +51,193 @@ func _setup_visuals():
 	add_child(visual_model)
 	visual_model.build(data.moveset)
 
+	debug_label = Label3D.new()
+	debug_label.position = Vector3(0.0, 2.55, 0.0)
+	debug_label.font_size = 28
+	debug_label.outline_size = 6
+	debug_label.no_depth_test = true
+	debug_label.visible = combat_debug
+	add_child(debug_label)
+
 func _physics_process(delta):
-	if data == null:
+	if data == null or is_dead:
 		return
 	attack_cooldown = max(0.0, attack_cooldown - delta)
+	stagger_immunity_timer = max(0.0, stagger_immunity_timer - delta)
+	_update_poise(delta)
+	_apply_gravity(delta)
+	var player = get_tree().get_first_node_in_group("player")
+	if player == null:
+		_stop_horizontal(delta)
+		move_and_slide()
+		return
+
+	if action.is_active():
+		_update_action(delta, player)
+	else:
+		_update_ai(delta, player)
+	move_and_slide()
+	_update_visual_state()
+	_update_debug_label()
+
+func _update_ai(delta: float, player):
+	var offset = player.global_position - global_position
+	offset.y = 0.0
+	var distance = offset.length()
+	if distance > data.aggro_range:
+		state = "idle"
+		_stop_horizontal(delta)
+		return
+	if distance > data.attack_range:
+		state = "chase"
+		var direction = offset.normalized()
+		_turn_toward(direction, delta, 8.0)
+		velocity.x = direction.x * data.move_speed
+		velocity.z = direction.z * data.move_speed
+	else:
+		state = "idle"
+		_stop_horizontal(delta, 12.0)
+		_turn_toward(offset.normalized(), delta, 9.0)
+		if attack_cooldown <= 0.0:
+			_begin_attack(player)
+
+func _begin_attack(player):
+	var direction = player.global_position - global_position
+	direction.y = 0.0
+	if direction.length_squared() < 0.001:
+		return
+	attack_direction = direction.normalized()
+	attack_has_hit = false
+	attack_sequence += 1
+	current_attack_id = attack_sequence
+	state = "windup"
+	attack_cooldown = data.attack_cooldown
+	action.begin("enemy_attack", [
+		{"name":"windup", "duration":data.attack_windup, "tracking":true, "allow_rotation":true, "allow_movement":false, "hitbox_active":false, "interruptible":true},
+		{"name":"active", "duration":data.attack_active_time, "tracking":false, "allow_rotation":false, "allow_movement":true, "hitbox_active":true, "interruptible":false},
+		{"name":"recovery", "duration":data.attack_recovery, "tracking":false, "allow_rotation":false, "allow_movement":false, "hitbox_active":false, "interruptible":true}
+	])
+
+func _update_action(delta: float, player):
+	action.update(delta)
+	if action.finished:
+		state = "idle"
+		action.cancel()
+		attack_has_hit = false
+		return
+	state = action.get_phase()
+	match state:
+		"windup":
+			_stop_horizontal(delta, 14.0)
+			var target_direction = player.global_position - global_position
+			target_direction.y = 0.0
+			if target_direction.length_squared() > 0.001:
+				var tracking_weight = min(1.0, delta * data.attack_tracking_speed)
+				attack_direction = attack_direction.slerp(target_direction.normalized(), tracking_weight).normalized()
+				_turn_toward(attack_direction, delta, data.attack_tracking_speed)
+		"active":
+			var lunge_speed = data.attack_lunge / max(0.05, data.attack_active_time)
+			velocity.x = attack_direction.x * lunge_speed
+			velocity.z = attack_direction.z * lunge_speed
+			if not attack_has_hit:
+				attack_has_hit = _apply_attack_hit(player)
+		"recovery":
+			_stop_horizontal(delta, 10.0)
+		"stagger":
+			_stop_horizontal(delta, 18.0)
+
+func _apply_attack_hit(player) -> bool:
+	if player == null or not is_instance_valid(player) or player.health_is_empty():
+		return false
+	var offset = player.global_position - global_position
+	offset.y = 0.0
+	if offset.length_squared() < 0.001 or offset.length() > data.attack_range + data.attack_lunge * 0.45:
+		return false
+	if attack_direction.angle_to(offset.normalized()) > deg_to_rad(data.attack_arc) * 0.5:
+		return false
+	var damage = data.damage
+	if data.moveset == "brute":
+		damage = int(round(damage * 1.35))
+	elif data.moveset == "lancer":
+		damage = int(round(damage * 1.1))
+	var hit = CombatHit.new(self, damage, data.poise_damage, attack_direction, player.global_position + Vector3.UP, data.impact_force, "enemy_" + data.moveset, current_attack_id)
+	player.receive_hit(hit)
+	return true
+
+func receive_hit(hit: CombatHit) -> int:
+	if is_dead:
+		return 0
+	var hit_key = "%s:%d" % [str(hit.attacker.get_instance_id()) if hit.attacker != null else "world", hit.attack_id]
+	if received_attack_ids.has(hit_key):
+		return 0
+	received_attack_ids[hit_key] = true
+	if received_attack_ids.size() > 24:
+		received_attack_ids.erase(received_attack_ids.keys()[0])
+	health -= int(hit.damage)
+	poise = max(0.0, poise - hit.poise_damage)
+	poise_recovery_timer = data.poise_recovery_delay
+	var staggered = poise <= 0.0 and stagger_immunity_timer <= 0.0
+	if visual_model != null:
+		visual_model.play_hit(hit.direction, "stagger" if staggered else hit.impact_type)
+	get_tree().call_group("game", "spawn_combat_impact", global_position + Vector3.UP, hit.direction, hit.impact_type)
+	get_tree().call_group("game", "request_hit_stop", 0.07 if hit.impact_type == "heavy" else 0.035)
+	if health <= 0:
+		_die()
+	elif staggered:
+		_start_stagger()
+	return hit.damage
+
+func take_damage(amount, source):
+	var direction = global_position - source.global_position if source != null else -global_transform.basis.z
+	direction.y = 0.0
+	return receive_hit(CombatHit.new(source, int(amount), float(amount) * 0.3, direction, global_position + Vector3.UP, 2.0, "light", int(Time.get_ticks_usec())))
+
+func _start_stagger():
+	action.cancel()
+	state = "stagger"
+	attack_has_hit = true
+	poise = max_poise * 0.30
+	stagger_immunity_timer = 0.65
+	action.begin("stagger", [{"name":"stagger", "duration":0.46, "interruptible":false}])
+
+func _update_poise(delta: float):
+	if poise_recovery_timer > 0.0:
+		poise_recovery_timer -= delta
+	elif poise < max_poise and state != "stagger":
+		poise = min(max_poise, poise + data.poise_recovery_rate * delta)
+
+func _apply_gravity(delta: float):
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = -0.1
-	var player = get_tree().get_first_node_in_group("player")
-	if player == null:
-		velocity.x = move_toward(velocity.x, 0.0, delta * data.move_speed * 3.0)
-		velocity.z = move_toward(velocity.z, 0.0, delta * data.move_speed * 3.0)
-		move_and_slide()
-		return
-	var offset = player.global_position - global_position
-	offset.y = 0.0
-	var distance = offset.length()
-	if visual_model != null:
-		visual_model.set_moving(distance <= data.aggro_range and distance > data.attack_range)
-	if distance <= data.aggro_range:
-		look_at(Vector3(player.global_position.x, global_position.y, player.global_position.z), Vector3.UP)
-		if distance > data.attack_range:
-			var direction = offset.normalized()
-			velocity.x = direction.x * data.move_speed
-			velocity.z = direction.z * data.move_speed
-		else:
-			velocity.x = 0.0
-			velocity.z = 0.0
-			_try_attack(player)
-	move_and_slide()
 
-func _try_attack(player):
-	if attack_cooldown > 0.0:
+func _turn_toward(direction: Vector3, delta: float, speed: float):
+	if direction.length_squared() < 0.001:
 		return
-	attack_cooldown = data.attack_cooldown
-	var damage = data.damage
-	match data.moveset:
-		"brute":
-			damage = int(damage * 1.35)
-		"lancer":
-			damage = int(damage * 1.1)
-		"hound":
-			attack_cooldown *= 0.75
-	player.take_damage(damage)
+	var desired_yaw = atan2(-direction.x, -direction.z)
+	rotation.y = lerp_angle(rotation.y, desired_yaw, 1.0 - exp(-speed * delta))
 
-func take_damage(amount, _source):
-	health -= int(amount)
-	if visual_model != null:
-		visual_model.flash_hit()
-	if health <= 0:
-		_die()
+func _stop_horizontal(delta: float, rate := 8.0):
+	velocity.x = move_toward(velocity.x, 0.0, data.move_speed * delta * rate)
+	velocity.z = move_toward(velocity.z, 0.0, data.move_speed * delta * rate)
+
+func _update_visual_state():
+	if visual_model == null:
+		return
+	visual_model.set_moving(state == "chase")
+	visual_model.set_combat_state(state, action.get_phase_progress())
 
 func set_lock_targeted(value: bool):
 	if visual_model != null:
 		visual_model.set_targeted(value)
 
 func _die():
+	if is_dead:
+		return
+	is_dead = true
+	state = "dead"
+	action.cancel()
 	set_physics_process(false)
 	collision_layer = 0
 	collision_mask = 0
@@ -98,14 +246,30 @@ func _die():
 		visual_model.play_death()
 	GameState.add_souls(data.souls_reward)
 	for index in range(data.drop_ids.size()):
-		var chance = 0.0
-		if index < data.drop_chances.size():
-			chance = float(data.drop_chances[index])
+		var chance = float(data.drop_chances[index]) if index < data.drop_chances.size() else 0.0
 		if randf() <= chance:
 			var item_id = data.drop_ids[index]
 			Inventory.add_item(item_id, 1)
 			var item = Database.get_item(item_id)
 			if item != null:
 				get_tree().call_group("ui", "notify", "Obtuviste %s." % item.display_name)
-	await get_tree().create_timer(0.45).timeout
+	await get_tree().create_timer(0.55).timeout
 	queue_free()
+
+func get_combat_debug_state() -> Dictionary:
+	return {
+		"state": state,
+		"phase": action.get_phase(),
+		"hitbox_active": action.get_flag("hitbox_active", false),
+		"poise": poise,
+		"max_poise": max_poise,
+		"attack_direction": attack_direction,
+		"attack_id": current_attack_id
+	}
+
+func _update_debug_label():
+	if debug_label == null:
+		return
+	debug_label.visible = combat_debug
+	if combat_debug:
+		debug_label.text = "%s %.0f%%\nPoise %.0f/%.0f\nHitbox %s" % [state, action.get_phase_progress() * 100.0, poise, max_poise, str(action.get_flag("hitbox_active", false))]

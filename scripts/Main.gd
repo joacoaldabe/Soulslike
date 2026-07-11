@@ -9,6 +9,7 @@ const UIScene = preload("res://scenes/UI.tscn")
 var player = null
 var ui = null
 var environment_root: Node3D = null
+var hit_stop_serial := 0
 var enemy_spawn_points = [
 	{"enemy_id": "hollow_sword", "position": Vector3(5, 0, -4)},
 	{"enemy_id": "axe_brute", "position": Vector3(-6, 0, -8)},
@@ -245,3 +246,39 @@ func _on_travel_requested(bonfire_id):
 		_spawn_player(GameState.current_bonfire_position)
 		_respawn_enemies()
 		ui.close_bonfire_menu()
+
+func request_hit_stop(duration: float):
+	hit_stop_serial += 1
+	var serial = hit_stop_serial
+	Engine.time_scale = 0.10
+	await get_tree().create_timer(clamp(duration, 0.015, 0.09), true, false, true).timeout
+	if serial == hit_stop_serial:
+		Engine.time_scale = 1.0
+
+func spawn_combat_impact(position: Vector3, direction: Vector3, impact_type: String):
+	var particles = GPUParticles3D.new()
+	particles.name = "CombatImpact"
+	particles.one_shot = true
+	particles.amount = 9 if impact_type == "heavy" or impact_type.contains("brute") else 5
+	particles.lifetime = 0.28
+	particles.explosiveness = 1.0
+	var process = ParticleProcessMaterial.new()
+	process.direction = (direction + Vector3.UP * 0.65).normalized()
+	process.spread = 42.0
+	process.initial_velocity_min = 1.4
+	process.initial_velocity_max = 3.1
+	process.gravity = Vector3(0.0, -5.0, 0.0)
+	process.scale_min = 0.025
+	process.scale_max = 0.065
+	particles.process_material = process
+	var spark = SphereMesh.new()
+	spark.radius = 0.035
+	spark.height = 0.07
+	spark.material = VisualLibrary.material("fire" if impact_type == "heavy" else "metal")
+	particles.draw_pass_1 = spark
+	add_child(particles)
+	particles.global_position = position
+	particles.emitting = true
+	await get_tree().create_timer(0.55, true, false, true).timeout
+	if is_instance_valid(particles):
+		particles.queue_free()

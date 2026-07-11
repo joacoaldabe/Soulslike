@@ -12,6 +12,16 @@ func _expect(condition: bool, message: String):
 		failures.append(message)
 		push_error("FAIL: " + message)
 
+func _capture_png(path: String):
+	if DisplayServer.get_name() == "headless":
+		print("SKIP: rendered screenshot unavailable in headless mode: ", path)
+		return OK
+	await RenderingServer.frame_post_draw
+	var viewport_texture = root.get_texture()
+	if viewport_texture == null:
+		return ERR_UNAVAILABLE
+	return viewport_texture.get_image().save_png(path)
+
 func _run():
 	var game_state = root.get_node("GameState")
 	var inventory = root.get_node("Inventory")
@@ -31,9 +41,7 @@ func _run():
 	_expect(get_nodes_in_group("interactable").size() >= 2, "bonfires are interactable")
 	_expect(player.visual_model != null, "modular player model attached")
 	_expect(player.visual_model.get_armor_slot("chest_armor") != null, "armor slots available")
-	await RenderingServer.frame_post_draw
-	var initial_image = root.get_texture().get_image()
-	_expect(initial_image.save_png("res://.godot/visual_initial.png") == OK, "initial camera screenshot saved")
+	_expect(await _capture_png("res://.godot/visual_initial.png") == OK, "initial camera screenshot saved")
 
 	var position_before_walk = player.global_position
 	Input.action_press("move_forward")
@@ -52,14 +60,14 @@ func _run():
 	game_state.stamina = game_state.max_stamina
 	player._start_roll()
 	_expect(player.is_rolling, "roll starts and consumes stamina")
-	await create_timer(0.55).timeout
+	await create_timer(0.72).timeout
 
 	player._toggle_lock_target()
 	_expect(player.lock_target != null, "lock-on selects an enemy")
 	game_state.stamina = game_state.max_stamina
 	player._start_attack("light")
-	_expect(player.is_attacking, "light attack starts and consumes stamina")
-	await create_timer(0.7).timeout
+	_expect(player.action_kind == "attack", "light attack starts and consumes stamina")
+	await create_timer(0.9).timeout
 
 	for weapon in database.list_weapons():
 		inventory.equipment["right_weapon"] = weapon.item_id
@@ -68,11 +76,12 @@ func _run():
 		_expect(player.visual_model.attack_family == weapon.weapon_family, "%s visual family" % weapon.display_name)
 		_expect(player.visual_model.get_armor_slot("right_weapon").get_child_count() > 0, "%s visible in hand" % weapon.display_name)
 		game_state.stamina = game_state.max_stamina
-		player.is_attacking = false
+		player.action.cancel()
+		player._finish_action()
 		player._start_attack("heavy")
-		_expect(player.is_attacking and player.attack_type == "heavy", "%s heavy attack" % weapon.display_name)
-		player.is_attacking = false
-		player.visual_model.set_attack_state(false,"heavy",0.0,0.1)
+		_expect(player.action_kind == "attack" and player.attack_type == "heavy", "%s heavy attack" % weapon.display_name)
+		player.action.cancel()
+		player._finish_action()
 
 	for class_data in database.list_classes():
 		var armor = database.get_armor(class_data.starting_armor)
@@ -90,9 +99,11 @@ func _run():
 	var original_position = player.global_position
 	player.global_position = Vector3(-8.0,0.0,1.35)
 	player.rotation.y = 0.0
+	player.camera_pivot.rotation.y = 0.0
+	player.camera_pivot.global_position = player.global_position + Vector3.UP * player.camera_pivot_height
 	await physics_frame
 	await physics_frame
-	var spring_arm = player.camera_pivot.get_child(0)
+	var spring_arm = player.spring_arm
 	_expect(spring_arm.get_hit_length() < spring_arm.spring_length, "camera spring arm prevents wall clipping")
 	player.global_position = original_position
 
@@ -109,8 +120,7 @@ func _run():
 	await create_timer(1.2).timeout
 	_expect(game_state.has_bloodstain, "death creates lost-souls bloodstain")
 	_expect(get_nodes_in_group("bloodstain").size() == 1, "bloodstain visual spawned")
-	await RenderingServer.frame_post_draw
-	_expect(root.get_texture().get_image().save_png("res://.godot/visual_bloodstain.png") == OK, "bloodstain screenshot saved")
+	_expect(await _capture_png("res://.godot/visual_bloodstain.png") == OK, "bloodstain screenshot saved")
 
 	player = get_first_node_in_group("player")
 	var bloodstain = get_nodes_in_group("bloodstain")[0]
@@ -123,16 +133,14 @@ func _run():
 	player.look_at(Vector3(bonfire.global_position.x,player.global_position.y,bonfire.global_position.z),Vector3.UP)
 	player.rotate_y(deg_to_rad(-24.0))
 	await physics_frame
-	await RenderingServer.frame_post_draw
-	_expect(root.get_texture().get_image().save_png("res://.godot/visual_bonfire_world.png") == OK, "bonfire world screenshot saved")
+	_expect(await _capture_png("res://.godot/visual_bonfire_world.png") == OK, "bonfire world screenshot saved")
 	bonfire.interact(player)
 	await process_frame
 	_expect(game_state.discovered_bonfires.has(bonfire.bonfire_id), "bonfire discovery and rest")
 	var level_before = game_state.level
 	game_state.add_souls(game_state.get_level_cost())
 	_expect(game_state.level_up("strength") and game_state.level == level_before + 1, "level up spends souls and improves an attribute")
-	await RenderingServer.frame_post_draw
-	_expect(root.get_texture().get_image().save_png("res://.godot/visual_bonfire.png") == OK, "bonfire screenshot saved")
+	_expect(await _capture_png("res://.godot/visual_bonfire.png") == OK, "bonfire screenshot saved")
 	var second_bonfire = get_nodes_in_group("bonfires").filter(func(node): return node.bonfire_id != bonfire.bonfire_id)[0]
 	second_bonfire.interact(player)
 	await process_frame
@@ -144,9 +152,7 @@ func _run():
 	_expect(ui.inventory_panel.visible, "inventory opens")
 	ui.close_inventory()
 
-	await RenderingServer.frame_post_draw
-	var image = root.get_texture().get_image()
-	var screenshot_error = image.save_png("res://.godot/visual_validation.png")
+	var screenshot_error = await _capture_png("res://.godot/visual_validation.png")
 	_expect(screenshot_error == OK, "visual validation screenshot saved")
 	var measured_fps = Performance.get_monitor(Performance.TIME_FPS)
 	print("Measured FPS: ", measured_fps)

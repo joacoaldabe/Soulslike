@@ -6,8 +6,17 @@ var weapon_root: Node3D
 var time := 0.0
 var moving := false
 var lock_marker: MeshInstance3D
+var archetype := "sword"
+var combat_state := "idle"
+var state_progress := 0.0
+var hit_timer := 0.0
+var hit_direction := Vector3.FORWARD
+var hit_strength := 1.0
+var base_body_scale := Vector3.ONE
+var base_weapon_position := Vector3.ZERO
 
 func build(archetype: String):
+	self.archetype = archetype
 	body_root = Node3D.new()
 	body_root.name = "ReplaceableModel"
 	add_child(body_root)
@@ -16,33 +25,106 @@ func build(archetype: String):
 		"lancer": _build_lancer()
 		"hound": _build_hound()
 		_: _build_hollow()
+	base_body_scale = body_root.scale
+	if weapon_root != null:
+		base_weapon_position = weapon_root.position
 	lock_marker = VisualLibrary.tapered(Vector2(0.0,0.02),Vector2(0.09,0.035),0.26,VisualLibrary.material("fire"),"LockMarker")
 	VisualLibrary.add_part(self,lock_marker,Vector3(0,2.42,0),Vector3(0,0,180))
 	lock_marker.visible = false
 
 func _process(delta):
 	time += delta
-	if body_root != null:
+	hit_timer = max(0.0, hit_timer - delta)
+	if body_root == null:
+		return
+	body_root.position = Vector3.ZERO
+	body_root.rotation = Vector3.ZERO
+	body_root.scale = base_body_scale
+	if weapon_root != null:
+		weapon_root.position = base_weapon_position
+		weapon_root.rotation = Vector3.ZERO
+	if combat_state in ["idle", "chase"]:
 		body_root.position.y = sin(time * (7.0 if moving else 2.0)) * (0.035 if moving else 0.012)
+	_apply_combat_pose()
+	if hit_timer > 0.0 and combat_state != "dead":
+		_apply_hit_pose()
 
 func set_moving(value: bool):
 	moving = value
 
 func flash_hit():
-	if body_root == null: return
-	var tween = create_tween()
-	body_root.scale = Vector3.ONE * 1.06
-	tween.tween_property(body_root, "scale", Vector3.ONE, 0.14)
+	play_hit(Vector3.FORWARD, "light")
+
+func play_hit(direction: Vector3, severity: String = "light"):
+	hit_direction = direction
+	hit_strength = 1.5 if severity == "stagger" or severity == "heavy" else 1.0
+	hit_timer = 0.28 if hit_strength > 1.0 else 0.18
+
+func set_combat_state(new_state: String, progress: float):
+	combat_state = new_state
+	state_progress = clamp(progress, 0.0, 1.0)
 
 func set_targeted(value: bool):
 	if lock_marker != null:
 		lock_marker.visible = value
 
 func play_death():
+	combat_state = "dead"
 	set_process(false)
 	var tween = create_tween().set_parallel()
 	tween.tween_property(body_root,"rotation_degrees",Vector3(78,0,24),0.42).set_trans(Tween.TRANS_QUAD)
 	tween.tween_property(body_root,"position:y",0.14,0.42).set_trans(Tween.TRANS_QUAD)
+
+func _apply_combat_pose():
+	var p = state_progress
+	match combat_state:
+		"windup":
+			var eased = p * p * (3.0 - 2.0 * p)
+			body_root.position.y -= 0.05 * eased
+			body_root.rotation.x = deg_to_rad(7.0 * eased)
+			if archetype == "brute" and weapon_root != null:
+				weapon_root.rotation_degrees = Vector3(-28.0 * eased, 0.0, -155.0 * eased)
+				body_root.rotation.y = deg_to_rad(-18.0 * eased)
+			elif archetype == "lancer" and weapon_root != null:
+				weapon_root.position.z += 0.52 * eased
+				body_root.rotation.y = deg_to_rad(-10.0 * eased)
+			elif archetype == "hound":
+				body_root.position.y -= 0.18 * eased
+				body_root.rotation.x = deg_to_rad(16.0 * eased)
+			elif weapon_root != null:
+				weapon_root.rotation_degrees = Vector3(-18.0 * eased, 0.0, -115.0 * eased)
+				body_root.rotation.y = deg_to_rad(-22.0 * eased)
+		"active":
+			var swing = 1.0 - pow(1.0 - p, 3.0)
+			body_root.position.z -= 0.10 * sin(p * PI)
+			if archetype == "brute" and weapon_root != null:
+				weapon_root.rotation_degrees = Vector3(lerp(-28.0, 22.0, swing), 0.0, lerp(-155.0, 78.0, swing))
+				body_root.rotation.y = deg_to_rad(lerp(-18.0, 28.0, swing))
+			elif archetype == "lancer" and weapon_root != null:
+				weapon_root.position.z += lerp(0.52, -0.48, swing)
+				body_root.rotation.x = deg_to_rad(-10.0 * sin(p * PI))
+			elif archetype == "hound":
+				body_root.position.y -= 0.16
+				body_root.position.z -= 0.38 * swing
+				body_root.rotation.x = deg_to_rad(lerp(14.0, -18.0, swing))
+			elif weapon_root != null:
+				weapon_root.rotation_degrees = Vector3(lerp(-18.0, 18.0, swing), 0.0, lerp(-115.0, 92.0, swing))
+				body_root.rotation.y = deg_to_rad(lerp(-22.0, 30.0, swing))
+		"recovery":
+			var settle = pow(1.0 - p, 2.0)
+			body_root.rotation.x = deg_to_rad(10.0 * settle)
+			if weapon_root != null:
+				weapon_root.rotation_degrees.z = 35.0 * settle
+		"stagger":
+			body_root.rotation.x = deg_to_rad(-12.0 * sin(p * PI))
+			body_root.rotation.z = deg_to_rad(16.0 * sin(p * PI))
+
+func _apply_hit_pose():
+	var weight = hit_timer / (0.28 if hit_strength > 1.0 else 0.18)
+	var local_direction = get_parent().global_transform.basis.inverse() * hit_direction
+	body_root.rotation.x += local_direction.z * 0.20 * weight * hit_strength
+	body_root.rotation.z += -local_direction.x * 0.22 * weight * hit_strength
+	body_root.position += Vector3(-local_direction.x, 0.04, -local_direction.z) * 0.07 * weight * hit_strength
 
 func _limb(parent: Node, name: String, pos: Vector3, length: float, width: float, mat: Material, angle := Vector3.ZERO):
 	var part = VisualLibrary.tapered(Vector2(width * 0.78, width * 0.78), Vector2(width, width), length, mat, name)
