@@ -39,11 +39,13 @@ func _run():
 	model._pose_model()
 	var standing_floor = _lowest_body_y()
 
-	for phase_data in [["windup",0.75],["active",0.1],["active",0.5],["active",0.9]]:
-		model.set_action_phase("attack",phase_data[0],phase_data[1])
-		model._pose_model()
-		var hand_z = model.right_hand.global_position.z
-		_expect(hand_z < 0.18, "attack %s %.2f keeps weapon hand in front (z=%.3f)" % [phase_data[0],phase_data[1],hand_z])
+	for weapon in root.get_node("Database").list_weapons():
+		model.set_equipped_weapon(weapon)
+		for phase_data in [["windup",0.75],["active",0.1],["active",0.5],["active",0.9]]:
+			model.set_action_phase("attack",phase_data[0],phase_data[1])
+			model._pose_model()
+			var hand_z = model.right_hand.global_position.z
+			_expect(hand_z < 0.18, "%s attack %s %.2f keeps weapon hand in front (z=%.3f)" % [weapon.weapon_family,phase_data[0],phase_data[1],hand_z])
 
 	model.set_action_phase("none","none",0.0)
 	model._pose_model()
@@ -51,20 +53,21 @@ func _run():
 	model.set_action_phase("roll","impulse",1.0)
 	model._pose_model()
 	_expect(abs(model.rig_root.global_transform.basis.y.z) > 0.85 and abs(model.left_thigh.rotation_degrees.x) < 25.0, "roll launch reaches a stretched horizontal dive")
+	_expect(abs(model.left_forearm.rotation_degrees.x) < 10.0 and model.left_hand.global_position.y > model.head.global_position.y, "roll launch stretches both arms upward")
 	_expect(_lowest_body_y() > standing_floor + 0.70, "roll dive rises clearly above the floor")
 	model.set_action_phase("roll","invulnerable",0.55)
 	model._pose_model()
-	_expect(abs(model.left_thigh.rotation_degrees.x) > 120.0 and abs(model.left_shin.rotation_degrees.x) > 80.0, "roll tightens into a fetal rotation pose")
+	_expect(abs(model.left_thigh.rotation_degrees.x) > 110.0 and abs(model.left_shin.rotation_degrees.x) > 70.0, "roll tightens into a fetal rotation pose")
 	var fetal_hand_distance = model.right_hand.global_position.distance_to(model.chest.global_position)
 	var fetal_foot_distance = model.right_foot.global_position.distance_to(model.chest.global_position)
-	_expect(fetal_hand_distance < 0.58 and fetal_foot_distance < 0.78, "fetal pose pulls hands and feet to torso (hand=%.3f foot=%.3f)" % [fetal_hand_distance,fetal_foot_distance])
+	_expect(fetal_hand_distance < 0.58 and fetal_foot_distance > 0.34 and fetal_foot_distance < 0.78, "fetal pose stays compact without putting feet inside torso (hand=%.3f foot=%.3f)" % [fetal_hand_distance,fetal_foot_distance])
 	var back_y = (model.chest.global_transform * Vector3(0.0,0.0,0.22)).y
 	var front_y = (model.chest.global_transform * Vector3(0.0,0.0,-0.22)).y
 	_expect(back_y < front_y - 0.05, "roll presents the back, not the chest, toward the floor")
 	_expect(_lowest_body_y() > standing_floor + 0.95, "fetal rotation happens near standing head height")
 	model.set_action_phase("roll","travel",0.30)
 	model._pose_model()
-	_expect(abs(model.left_thigh.rotation_degrees.x) > 120.0 and abs(model.left_shin.rotation_degrees.x) > 80.0, "roll keeps the fetal pose through its main rotation")
+	_expect(abs(model.left_thigh.rotation_degrees.x) > 110.0 and abs(model.left_shin.rotation_degrees.x) > 70.0, "roll keeps the fetal pose through its main rotation")
 	_expect(_lowest_body_y() > standing_floor + 0.05, "roll remains airborne until the end of its main rotation")
 	model.set_action_phase("roll","landing",0.8)
 	model._pose_model()

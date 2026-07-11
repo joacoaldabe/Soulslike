@@ -45,7 +45,10 @@ const ENEMY_PATHS = [
 
 const BONFIRE_PATHS = [
 	"res://data/bonfires/ash_camp.tres",
-	"res://data/bonfires/ruined_gate.tres"
+	"res://data/bonfires/ruined_gate.tres",
+	"res://data/bonfires/cloister_watch.tres",
+	"res://data/bonfires/crypt_vigil.tres",
+	"res://data/bonfires/high_sanctuary.tres"
 ]
 
 var classes = {}

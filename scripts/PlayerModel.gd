@@ -366,14 +366,14 @@ func _pose_roll():
 			var launch = 1.0 - pow(1.0 - p, 3.0)
 			angle = launch * PI * 0.46
 			ground_clearance = lerp(0.12, 0.82, launch)
-			_apply_roll_tuck(lerp(0.04, 0.16, launch), angle, side_roll, forward_sign)
+			_apply_roll_tuck(lerp(0.04, 0.16, launch), angle, side_roll, forward_sign, 0.0)
 		"invulnerable":
 			var curl_in = smoothstep(0.14, 0.42, p)
 			var tuck = lerp(0.16, 1.0, curl_in)
 			var spin = p * p * (3.0 - 2.0 * p)
 			angle = PI * lerp(0.46, 1.30, spin)
 			ground_clearance = 0.82 + sin(p * PI) * 0.28
-			_apply_roll_tuck(tuck, angle, side_roll, forward_sign)
+			_apply_roll_tuck(tuck, angle, side_roll, forward_sign, smoothstep(0.28, 0.52, p))
 		"travel":
 			var release = smoothstep(0.42, 1.0, p)
 			angle = PI * lerp(1.30, 2.0, p * p * (3.0 - 2.0 * p))
@@ -393,7 +393,7 @@ func _pose_roll():
 			pass
 	_keep_roll_above_floor(ground_clearance)
 
-func _apply_roll_tuck(tuck: float, angle: float, side_roll: bool, forward_sign: float):
+func _apply_roll_tuck(tuck: float, angle: float, side_roll: bool, forward_sign: float, arm_fold := 1.0):
 	hips.position.y = 0.58 + tuck * 0.03
 	if side_roll:
 		rig_root.rotation.z = -sign(roll_local_direction.x) * angle
@@ -401,14 +401,16 @@ func _apply_roll_tuck(tuck: float, angle: float, side_roll: bool, forward_sign: 
 		rig_root.rotation.x = -forward_sign * angle
 	chest.rotation.x += -0.78 * tuck
 	head.rotation.x = 0.46 * tuck
-	left_shoulder.rotation_degrees = Vector3(72.0 * tuck, 0.0, -34.0)
-	right_shoulder.rotation_degrees = Vector3(72.0 * tuck, 0.0, 34.0)
-	left_forearm.rotation_degrees = Vector3(-142.0 * tuck, 0.0, 0.0)
-	right_forearm.rotation_degrees = Vector3(-142.0 * tuck, 0.0, 0.0)
-	left_thigh.rotation_degrees = Vector3(136.0 * tuck, 0.0, -9.0)
-	right_thigh.rotation_degrees = Vector3(136.0 * tuck, 0.0, 9.0)
-	left_shin.rotation_degrees = Vector3(92.0 * tuck, 0.0, 0.0)
-	right_shin.rotation_degrees = Vector3(92.0 * tuck, 0.0, 0.0)
+	var shoulder_x = lerp(-105.0, 72.0 * tuck, arm_fold)
+	var forearm_x = lerp(2.0, -142.0 * tuck, arm_fold)
+	left_shoulder.rotation_degrees = Vector3(shoulder_x, 0.0, lerp(-10.0, -34.0, arm_fold))
+	right_shoulder.rotation_degrees = Vector3(shoulder_x, 0.0, lerp(10.0, 34.0, arm_fold))
+	left_forearm.rotation_degrees = Vector3(forearm_x, 0.0, 0.0)
+	right_forearm.rotation_degrees = Vector3(forearm_x, 0.0, 0.0)
+	left_thigh.rotation_degrees = Vector3(118.0 * tuck, 0.0, -11.0)
+	right_thigh.rotation_degrees = Vector3(118.0 * tuck, 0.0, 11.0)
+	left_shin.rotation_degrees = Vector3(76.0 * tuck, 0.0, 0.0)
+	right_shin.rotation_degrees = Vector3(76.0 * tuck, 0.0, 0.0)
 
 func _keep_roll_above_floor(clearance := 0.0):
 	var lowest = _get_lowest_body_y()
@@ -450,21 +452,21 @@ func _pose_attack():
 		"axe":
 			chest.rotation.y = lerp(-0.35, 0.48, progress) * heavy
 			chest.rotation.x = -0.18 * impact
-			right_shoulder.rotation_degrees = Vector3(lerp(-135.0, 72.0, progress), 0.0, lerp(-28.0, 62.0, progress))
-			right_forearm.rotation_degrees = Vector3(-38.0, 0.0, lerp(-12.0, 28.0, progress))
+			right_shoulder.rotation_degrees = Vector3(lerp(42.0, 105.0, progress), 0.0, lerp(55.0, -58.0, progress))
+			right_forearm.rotation_degrees = Vector3(lerp(18.0, 42.0, impact), 0.0, lerp(-12.0, 24.0, progress))
 			left_shoulder.rotation_degrees = Vector3(-72.0, -18.0, -44.0)
 		"spear":
 			var thrust = sin(progress * PI)
 			chest.rotation.y = lerp(-0.18, 0.16, progress)
 			right_shoulder.position.z = -0.01 - thrust * 0.30
-			right_shoulder.rotation_degrees = Vector3(-84.0, 0.0, 18.0)
+			right_shoulder.rotation_degrees = Vector3(84.0, 0.0, 18.0)
 			right_forearm.rotation_degrees = Vector3(-4.0, 0.0, 0.0)
 			left_shoulder.rotation_degrees = Vector3(-74.0, 0.0, -28.0)
 			left_forearm.rotation_degrees = Vector3(-34.0, 0.0, 0.0)
 		"mace":
 			chest.rotation.y = lerp(0.32, -0.45, progress) * heavy
-			right_shoulder.rotation_degrees = Vector3(lerp(-118.0, 56.0, progress), 0.0, lerp(-46.0, 70.0, progress))
-			right_forearm.rotation_degrees = Vector3(-72.0 + impact * 38.0, 0.0, lerp(-18.0, 30.0, progress))
+			right_shoulder.rotation_degrees = Vector3(lerp(34.0, 94.0, progress), 0.0, lerp(-54.0, 58.0, progress))
+			right_forearm.rotation_degrees = Vector3(lerp(12.0, 38.0, impact), 0.0, lerp(-18.0, 30.0, progress))
 			left_shoulder.rotation_degrees = Vector3(-35.0, 0.0, -28.0)
 		_:
 			var eased = p * p * (3.0 - 2.0 * p)

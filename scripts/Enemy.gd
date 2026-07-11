@@ -13,6 +13,8 @@ var action := CombatAction.new()
 var state := "idle"
 var attack_cooldown := 0.0
 var attack_direction := Vector3.FORWARD
+var attack_lunge_distance := 0.0
+var attack_retreat_distance := 0.0
 var attack_has_hit := false
 var attack_sequence := 0
 var current_attack_id := 0
@@ -88,7 +90,16 @@ func _update_ai(delta: float, player):
 		state = "idle"
 		_stop_horizontal(delta)
 		return
-	if distance > data.attack_range:
+	var preferred_distance = _preferred_combat_distance()
+	if distance < preferred_distance:
+		state = "reposition"
+		var retreat_direction = -offset.normalized()
+		_turn_toward(offset.normalized(), delta, 9.0)
+		velocity.x = retreat_direction.x * data.move_speed * 0.72
+		velocity.z = retreat_direction.z * data.move_speed * 0.72
+		return
+	var engagement_range = data.attack_range + min(0.45, data.move_speed * 0.16)
+	if distance > engagement_range:
 		state = "chase"
 		var direction = offset.normalized()
 		_turn_toward(direction, delta, 8.0)
@@ -107,6 +118,9 @@ func _begin_attack(player):
 	if direction.length_squared() < 0.001:
 		return
 	attack_direction = direction.normalized()
+	var preferred_distance = _preferred_combat_distance()
+	attack_lunge_distance = clamp(direction.length() - preferred_distance, 0.12, data.attack_lunge)
+	attack_retreat_distance = 0.22 + attack_lunge_distance * 0.45
 	attack_has_hit = false
 	attack_sequence += 1
 	current_attack_id = attack_sequence
@@ -136,13 +150,19 @@ func _update_action(delta: float, player):
 				attack_direction = attack_direction.slerp(target_direction.normalized(), tracking_weight).normalized()
 				_turn_toward(attack_direction, delta, data.attack_tracking_speed)
 		"active":
-			var lunge_speed = data.attack_lunge / max(0.05, data.attack_active_time)
+			var lunge_speed = attack_lunge_distance / max(0.05, data.attack_active_time)
 			velocity.x = attack_direction.x * lunge_speed
 			velocity.z = attack_direction.z * lunge_speed
 			if not attack_has_hit:
 				attack_has_hit = _apply_attack_hit(player)
 		"recovery":
-			_stop_horizontal(delta, 10.0)
+			var retreat_progress = action.get_phase_progress()
+			if retreat_progress < 0.55:
+				var retreat_speed = attack_retreat_distance / max(0.05, data.attack_recovery * 0.55)
+				velocity.x = -attack_direction.x * retreat_speed
+				velocity.z = -attack_direction.z * retreat_speed
+			else:
+				_stop_horizontal(delta, 10.0)
 		"stagger":
 			_stop_horizontal(delta, 18.0)
 
@@ -222,10 +242,13 @@ func _stop_horizontal(delta: float, rate := 8.0):
 	velocity.x = move_toward(velocity.x, 0.0, data.move_speed * delta * rate)
 	velocity.z = move_toward(velocity.z, 0.0, data.move_speed * delta * rate)
 
+func _preferred_combat_distance() -> float:
+	return max(1.05, data.attack_range * 0.72)
+
 func _update_visual_state():
 	if visual_model == null:
 		return
-	visual_model.set_moving(state == "chase")
+	visual_model.set_moving(state == "chase" or state == "reposition")
 	visual_model.set_combat_state(state, action.get_phase_progress())
 
 func set_lock_targeted(value: bool):
@@ -253,8 +276,6 @@ func _die():
 			var item = Database.get_item(item_id)
 			if item != null:
 				get_tree().call_group("ui", "notify", "Obtuviste %s." % item.display_name)
-	await get_tree().create_timer(0.55).timeout
-	queue_free()
 
 func get_combat_debug_state() -> Dictionary:
 	return {

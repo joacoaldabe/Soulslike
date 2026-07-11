@@ -2,6 +2,7 @@ extends Area3D
 
 @export var chest_id := "chest"
 @export_enum("random", "all") var loot_mode := "random"
+@export var loot_items: Dictionary = {}
 
 var is_open := false
 var lid_pivot: Node3D = null
@@ -16,10 +17,24 @@ func interact(_player):
 		return
 	is_open = true
 	_open_lid()
-	if loot_mode == "all":
+	if not loot_items.is_empty():
+		_grant_defined_items()
+	elif loot_mode == "all":
 		_grant_all_items()
 	else:
 		_grant_random_item()
+
+func _grant_defined_items():
+	var granted := []
+	for item_id in loot_items.keys():
+		var amount: int = max(1, int(loot_items[item_id]))
+		if Database.get_item(item_id) == null:
+			push_warning("Unknown chest item: %s" % item_id)
+			continue
+		Inventory.add_item(item_id, amount)
+		var item: Resource = Database.get_item(item_id)
+		granted.append("%s x%d" % [item.display_name, amount])
+	get_tree().call_group("ui", "notify", "Cofre abierto: %s." % ", ".join(granted))
 
 func _grant_random_item():
 	var item_ids = Database.list_all_item_ids()
@@ -27,7 +42,7 @@ func _grant_random_item():
 		return
 	var item_id = item_ids.pick_random()
 	Inventory.add_item(item_id, 1)
-	var item = Database.get_item(item_id)
+	var item: Resource = Database.get_item(item_id)
 	get_tree().call_group("ui", "notify", "Cofre abierto: %s." % (item.display_name if item != null else item_id))
 
 func _grant_all_items():

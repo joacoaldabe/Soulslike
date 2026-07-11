@@ -4,6 +4,6 @@
 
 [resource]
 script = ExtResource("1")
-bonfire_id = "ruined_gate"
-display_name = "Portón de la Nave"
-position = Vector3(0, 0, -31)
+bonfire_id = "high_sanctuary"
+display_name = "Santuario Mayor"
+position = Vector3(0, 0, -203)

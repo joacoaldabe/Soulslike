@@ -8,6 +8,7 @@ signal stamina_changed
 signal player_died(position)
 signal bonfire_discovered(bonfire_id)
 signal bloodstain_changed
+signal church_completed_changed
 
 const ATTRIBUTES = [
 	"vitality",
@@ -55,6 +56,7 @@ var max_health = 300
 var health = 300
 var max_stamina = 100
 var stamina = 100
+var church_completed := false
 
 func _ready():
 	_setup_input_actions()
@@ -112,6 +114,7 @@ func create_character(new_class_id):
 	souls = 0
 	lost_souls = 0
 	has_bloodstain = false
+	church_completed = false
 	discovered_bonfires.clear()
 	attributes = class_data.attributes.duplicate(true)
 	Inventory.reset_to_class(class_data)
@@ -126,6 +129,13 @@ func create_character(new_class_id):
 	character_ready = true
 	emit_signal("character_created")
 	_emit_all_stat_signals()
+	return true
+
+func complete_church() -> bool:
+	if church_completed:
+		return false
+	church_completed = true
+	emit_signal("church_completed_changed")
 	return true
 
 func _recalculate_derived_stats():

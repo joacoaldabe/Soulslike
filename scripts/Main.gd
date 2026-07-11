@@ -5,18 +5,15 @@ const EnemyScene = preload("res://scenes/Enemy.tscn")
 const BonfireScene = preload("res://scenes/Bonfire.tscn")
 const BloodstainScene = preload("res://scenes/Bloodstain.tscn")
 const ChestScene = preload("res://scenes/Chest.tscn")
+const FinalAltarScene = preload("res://scenes/FinalAltar.tscn")
 const UIScene = preload("res://scenes/UI.tscn")
 
 var player = null
 var ui = null
-var environment_root: Node3D = null
+var environment_root: GothicChurchLevel = null
 var hit_stop_serial := 0
-var enemy_spawn_points = [
-	{"enemy_id": "hollow_sword", "position": Vector3(5, 0, -4)},
-	{"enemy_id": "axe_brute", "position": Vector3(-6, 0, -8)},
-	{"enemy_id": "spear_guard", "position": Vector3(10, 0, -12)},
-	{"enemy_id": "ash_hound", "position": Vector3(-10, 0, -15)}
-]
+var enemy_spawn_points = []
+var chest_spawn_points = []
 
 func _ready():
 	add_to_group("game")
@@ -24,6 +21,7 @@ func _ready():
 	_create_world()
 	_spawn_bonfires()
 	_spawn_chests()
+	_spawn_final_altar()
 	ui = UIScene.instantiate()
 	add_child(ui)
 	ui.character_selected.connect(_on_character_selected)
@@ -60,27 +58,11 @@ func _create_world():
 	sun.light_energy = 1.35
 	sun.shadow_enabled = true
 	add_child(sun)
-	environment_root = Node3D.new()
-	environment_root.name = "ReplaceableRuinedCourtyard"
+	environment_root = GothicChurchLevel.new()
 	add_child(environment_root)
-
-	var ground_body = StaticBody3D.new()
-	ground_body.name = "Ground"
-	environment_root.add_child(ground_body)
-	var ground_mesh = MeshInstance3D.new()
-	var plane = PlaneMesh.new()
-	plane.size = Vector2(70, 70)
-	ground_mesh.mesh = plane
-	ground_mesh.material_override = VisualLibrary.material("wet_stone")
-	ground_body.add_child(ground_mesh)
-	var ground_collision = CollisionShape3D.new()
-	var ground_shape = BoxShape3D.new()
-	ground_shape.size = Vector3(38, 0.2, 38)
-	ground_collision.shape = ground_shape
-	ground_collision.position.y = -0.1
-	ground_body.add_child(ground_collision)
-
-	_build_ruined_courtyard()
+	environment_root.build()
+	enemy_spawn_points = environment_root.enemy_spawns
+	chest_spawn_points = environment_root.chest_spawns
 
 func _build_ruined_courtyard():
 	_create_paving()
@@ -200,16 +182,19 @@ func _spawn_bonfires():
 		add_child(bonfire)
 
 func _spawn_chests():
-	for chest_data in [
-		{"id":"courtyard_cache", "mode":"random", "position":Vector3(-8.2,0.0,-5.4), "rotation":18.0},
-		{"id":"royal_treasury", "mode":"all", "position":Vector3(7.4,0.0,-14.8), "rotation":-28.0}
-	]:
+	for chest_data in chest_spawn_points:
 		var chest = ChestScene.instantiate()
 		chest.chest_id = chest_data["id"]
-		chest.loot_mode = chest_data["mode"]
+		chest.loot_items = chest_data["loot"].duplicate()
 		chest.position = chest_data["position"]
 		chest.rotation_degrees.y = chest_data["rotation"]
 		add_child(chest)
+
+func _spawn_final_altar():
+	var altar = FinalAltarScene.instantiate()
+	altar.position = Vector3(0,0,-229)
+	altar.rotation_degrees.y = 180.0
+	add_child(altar)
 
 func _on_character_selected(class_id):
 	if GameState.create_character(class_id):
@@ -225,7 +210,7 @@ func _spawn_player(position):
 	if player != null and is_instance_valid(player):
 		player.queue_free()
 	player = PlayerScene.instantiate()
-	player.position = position + Vector3(0.0, 0.0, 1.7)
+	player.position = position + Vector3(0.0, 0.0, -1.7)
 	add_child(player)
 
 func _respawn_enemies():
