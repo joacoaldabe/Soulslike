@@ -73,6 +73,14 @@ func _physics_process(delta):
 		_stop_horizontal(delta)
 		move_and_slide()
 		return
+	if player.get("is_resting_at_bonfire") == true:
+		action.cancel()
+		attack_has_hit = false
+		state = "idle"
+		_stop_horizontal(delta, 16.0)
+		move_and_slide()
+		_update_visual_state()
+		return
 
 	if action.is_active():
 		_update_action(delta, player)

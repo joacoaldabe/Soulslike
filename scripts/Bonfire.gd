@@ -68,7 +68,9 @@ func _setup_visuals():
 	particles.draw_pass_1 = spark
 	add_child(particles)
 
-func interact(_player):
+func interact(player):
 	GameState.discover_bonfire(bonfire_id, global_position)
 	GameState.restore_at_bonfire()
+	if player != null and player.has_method("begin_bonfire_rest"):
+		player.begin_bonfire_rest(global_position)
 	get_tree().call_group("ui", "open_bonfire_menu", bonfire_id)

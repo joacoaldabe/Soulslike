@@ -44,6 +44,10 @@ var lock_target = null
 var action := CombatAction.new()
 var action_kind := ""
 var is_rolling := false
+var is_resting_at_bonfire := false
+var run_requires_release := false
+var bonfire_pose_progress := 0.0
+var bonfire_transition_direction := 0.0
 var is_attacking := false
 var attack_type := "light"
 var attack_direction := Vector3.FORWARD
@@ -142,13 +146,17 @@ func _physics_process(delta):
 	if not GameState.character_ready:
 		return
 	last_move_age += delta
+	_update_bonfire_transition(delta)
 	_update_camera(delta)
 	_update_poise(delta)
 	_update_action(delta)
 	_apply_gravity(delta)
 	_validate_lock_target()
 
-	if _ui_blocks_gameplay():
+	if is_resting_at_bonfire:
+		velocity = Vector3.ZERO
+		GameState.regen_stamina(STAMINA_REGEN * delta)
+	elif _ui_blocks_gameplay():
 		_stop_horizontal(delta)
 		GameState.regen_stamina(STAMINA_REGEN * delta)
 	elif action_kind == "roll":
@@ -221,7 +229,12 @@ func _get_input_direction() -> Vector3:
 
 func _handle_movement(delta: float):
 	var direction = _get_input_direction()
-	var running = Input.is_action_pressed("run") and direction.length_squared() > 0.001 and GameState.stamina > 3.0
+	var run_pressed = Input.is_action_pressed("run")
+	if not run_pressed:
+		run_requires_release = false
+	elif GameState.stamina <= 3.0:
+		run_requires_release = true
+	var running = run_pressed and not run_requires_release and direction.length_squared() > 0.001
 	var speed = RUN_SPEED if running else WALK_SPEED
 	velocity.x = direction.x * speed
 	velocity.z = direction.z * speed
@@ -234,6 +247,8 @@ func _handle_movement(delta: float):
 		_turn_toward_direction(_direction_to_lock_target(), delta, 10.0)
 	if running:
 		GameState.spend_stamina(RUN_STAMINA_PER_SECOND * delta)
+		if GameState.stamina <= 3.0:
+			run_requires_release = true
 	else:
 		GameState.regen_stamina(STAMINA_REGEN * delta)
 
@@ -460,7 +475,45 @@ func _update_visual_state():
 		return
 	var horizontal_speed = Vector2(velocity.x, velocity.z).length()
 	visual_model.set_locomotion(horizontal_speed / RUN_SPEED, horizontal_speed > WALK_SPEED + 0.4)
-	visual_model.set_action_phase(action_kind, action.get_phase(), action.get_phase_progress())
+	if action_kind == "bonfire_rest":
+		visual_model.set_action_phase(action_kind, "transition", bonfire_pose_progress)
+	else:
+		visual_model.set_action_phase(action_kind, action.get_phase(), action.get_phase_progress())
+
+func _update_bonfire_transition(delta: float):
+	if bonfire_transition_direction == 0.0:
+		return
+	bonfire_pose_progress = clamp(bonfire_pose_progress + bonfire_transition_direction * delta / 0.58, 0.0, 1.0)
+	if bonfire_pose_progress >= 1.0:
+		bonfire_transition_direction = 0.0
+	elif bonfire_pose_progress <= 0.0:
+		bonfire_transition_direction = 0.0
+		is_resting_at_bonfire = false
+		action_kind = ""
+
+func begin_bonfire_rest(bonfire_position: Vector3):
+	action.cancel()
+	action_kind = "bonfire_rest"
+	is_attacking = false
+	is_rolling = false
+	is_resting_at_bonfire = true
+	bonfire_pose_progress = 0.0
+	bonfire_transition_direction = 1.0
+	_release_lock_target()
+	var away = global_position - bonfire_position
+	away.y = 0.0
+	if away.length_squared() < 0.01:
+		away = Vector3.BACK
+	away = away.normalized()
+	global_position = bonfire_position + away * 1.45
+	rotation.y = atan2(away.x, away.z)
+	velocity = Vector3.ZERO
+
+func end_bonfire_rest():
+	if not is_resting_at_bonfire:
+		return
+	bonfire_transition_direction = -1.0
+	velocity = Vector3.ZERO
 
 func _update_equipment_visuals():
 	if visual_model == null:

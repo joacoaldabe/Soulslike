@@ -272,6 +272,8 @@ func _pose_model(delta := 0.0):
 	_pose_base()
 	if death_pose:
 		_pose_death()
+	elif action_kind == "bonfire_rest":
+		_pose_bonfire_rest()
 	elif action_kind == "roll" or is_rolling:
 		_pose_roll()
 	elif action_kind == "attack" or attack_active:
@@ -297,6 +299,8 @@ func _roll_pose_joints() -> Array:
 		right_thigh, right_shin, right_foot]
 
 func _pose_base():
+	if slots.has("right_weapon"):
+		slots["right_weapon"].visible = true
 	rig_root.position = Vector3.ZERO
 	rig_root.rotation = Vector3.ZERO
 	hips.position = Vector3(0.0, 0.93, 0.0)
@@ -328,6 +332,23 @@ func _pose_idle():
 	left_shoulder.rotation.x += sin(animation_time * 2.2) * 0.035
 	right_shoulder.rotation.x -= sin(animation_time * 2.2) * 0.035
 
+func _pose_bonfire_rest():
+	var p = action_progress * action_progress * (3.0 - 2.0 * action_progress)
+	if slots.has("right_weapon"):
+		slots["right_weapon"].visible = action_progress < 0.12
+	hips.position.y = lerp(0.93, 0.43, p)
+	hips.rotation.x = -0.12 * p
+	chest.rotation.x = -0.24 * p
+	head.rotation.x = 0.14 * p
+	left_thigh.rotation_degrees = Vector3(72.0 * p, 0.0, -12.0 * p)
+	left_shin.rotation_degrees = Vector3(lerp(4.0, -82.0, p), 0.0, 0.0)
+	right_thigh.rotation_degrees = Vector3(104.0 * p, 0.0, 16.0 * p)
+	right_shin.rotation_degrees = Vector3(lerp(4.0, -122.0, p), 0.0, 0.0)
+	left_shoulder.rotation_degrees = Vector3(lerp(5.0, 38.0, p), -6.0 * p, lerp(-7.0, -18.0, p))
+	left_forearm.rotation_degrees = Vector3(lerp(-4.0, -22.0, p), 0.0, lerp(-3.0, 0.0, p))
+	right_shoulder.rotation_degrees = Vector3(lerp(5.0, 42.0, p), 7.0 * p, lerp(7.0, 20.0, p))
+	right_forearm.rotation_degrees = Vector3(lerp(-4.0, -26.0, p), 0.0, lerp(3.0, 0.0, p))
+
 func _pose_locomotion():
 	var pace = 8.5 if is_running else 5.3
 	var strength = (0.9 if is_running else 0.58) * locomotion_amount
@@ -339,14 +360,21 @@ func _pose_locomotion():
 	chest.rotation.y = -hips.rotation.y * 0.7
 	left_thigh.rotation.x = swing
 	right_thigh.rotation.x = -swing
-	left_shin.rotation.x = max(0.0, -swing) * 0.65
-	right_shin.rotation.x = max(0.0, swing) * 0.65
+	# Positive thigh rotation moves the leg forward; knees fold backward with negative X.
+	var knee_bend = 0.92 if is_running else 0.62
+	left_shin.rotation.x = -max(0.0, swing) * knee_bend - max(0.0, -swing) * 0.16
+	right_shin.rotation.x = -max(0.0, -swing) * knee_bend - max(0.0, swing) * 0.16
 	left_foot.rotation.x = -0.18 - max(0.0, swing) * 0.25
 	right_foot.rotation.x = -0.18 - max(0.0, -swing) * 0.25
 	left_shoulder.rotation.x = -swing * 0.55
 	right_shoulder.rotation.x = swing * 0.55
-	left_forearm.rotation.x = -0.25 + max(0.0, swing) * 0.25
-	right_forearm.rotation.x = -0.25 + max(0.0, -swing) * 0.25
+	var elbow_bend = 0.46 if is_running else 0.28
+	var elbow_swing = 0.58 if is_running else 0.32
+	# Elbows fold forward with positive local X and bend further on the forward arm swing.
+	left_forearm.rotation.x = elbow_bend + max(0.0, -swing) * elbow_swing
+	right_forearm.rotation.x = elbow_bend + max(0.0, swing) * elbow_swing
+	left_forearm.rotation.z = -0.05 - abs(swing) * (0.10 if is_running else 0.045)
+	right_forearm.rotation.z = 0.05 + abs(swing) * (0.10 if is_running else 0.045)
 
 func _pose_roll():
 	var p = action_progress if action_kind == "roll" else clamp(1.0 - roll_timer / roll_duration, 0.0, 1.0)

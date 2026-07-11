@@ -6,7 +6,7 @@ const PLAYABLE_AREA := 7808.0
 var enemy_spawns := [
 	{"enemy_id":"hollow_sword", "position":Vector3(-6,0,-14)},
 	{"enemy_id":"hollow_sword", "position":Vector3(7,0,-22)},
-	{"enemy_id":"ash_hound", "position":Vector3(0,0,-37)},
+	{"enemy_id":"ash_hound", "position":Vector3(-5,0,-41)},
 	{"enemy_id":"spear_guard", "position":Vector3(-5,0,-50)},
 	{"enemy_id":"hollow_sword", "position":Vector3(6,0,-62)},
 	{"enemy_id":"axe_brute", "position":Vector3(0,0,-75)},
@@ -14,7 +14,7 @@ var enemy_spawns := [
 	{"enemy_id":"ash_hound", "position":Vector3(18,0,-86)},
 	{"enemy_id":"hollow_sword", "position":Vector3(-8,0,-96)},
 	{"enemy_id":"axe_brute", "position":Vector3(9,0,-99)},
-	{"enemy_id":"ash_hound", "position":Vector3(30,0,-111)},
+	{"enemy_id":"ash_hound", "position":Vector3(24,0,-107)},
 	{"enemy_id":"hollow_sword", "position":Vector3(39,0,-121)},
 	{"enemy_id":"spear_guard", "position":Vector3(28,0,-131)},
 	{"enemy_id":"hollow_sword", "position":Vector3(4,0,-143)},
@@ -22,7 +22,7 @@ var enemy_spawns := [
 	{"enemy_id":"axe_brute", "position":Vector3(5,0,-162)},
 	{"enemy_id":"spear_guard", "position":Vector3(-7,0,-180)},
 	{"enemy_id":"hollow_sword", "position":Vector3(7,0,-189)},
-	{"enemy_id":"axe_brute", "position":Vector3(0,0,-205)},
+	{"enemy_id":"axe_brute", "position":Vector3(-7,0,-194)},
 	{"enemy_id":"spear_guard", "position":Vector3(-8,0,-218)},
 	{"enemy_id":"ash_hound", "position":Vector3(8,0,-224)},
 ]

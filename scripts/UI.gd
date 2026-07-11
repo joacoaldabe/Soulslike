@@ -327,6 +327,7 @@ func open_bonfire_menu(_bonfire_id):
 
 func close_bonfire_menu():
 	bonfire_panel.hide()
+	get_tree().call_group("player", "end_bonfire_rest")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _refresh_travel_options():
