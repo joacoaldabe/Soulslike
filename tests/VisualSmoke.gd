@@ -39,9 +39,39 @@ func _run():
 	_expect(player != null, "player spawned")
 	_expect(get_nodes_in_group("enemies").size() == 4, "four enemies spawned")
 	_expect(get_nodes_in_group("interactable").size() >= 2, "bonfires are interactable")
+	_expect(get_nodes_in_group("chests").size() == 2, "two loot chests spawned")
 	_expect(player.visual_model != null, "modular player model attached")
 	_expect(player.visual_model.get_armor_slot("chest_armor") != null, "armor slots available")
 	_expect(await _capture_png("res://.godot/visual_initial.png") == OK, "initial camera screenshot saved")
+
+	var random_chest = get_nodes_in_group("chests").filter(func(node): return node.loot_mode == "random")[0]
+	var all_chest = get_nodes_in_group("chests").filter(func(node): return node.loot_mode == "all")[0]
+	_expect(random_chest.has_node("ChestCollision"), "chest has solid world collision")
+	var total_items_before = 0
+	for count in inventory.item_counts.values():
+		total_items_before += int(count)
+	random_chest.interact(player)
+	await create_timer(0.6).timeout
+	var total_items_after = 0
+	for count in inventory.item_counts.values():
+		total_items_after += int(count)
+	_expect(random_chest.is_open and total_items_after == total_items_before + 1, "random chest opens once and grants one item")
+	_expect(random_chest.lid_pivot.rotation_degrees.x > 90.0, "random chest lid remains visibly open")
+	random_chest.interact(player)
+	await process_frame
+	var total_items_after_second_interaction = 0
+	for count in inventory.item_counts.values():
+		total_items_after_second_interaction += int(count)
+	_expect(total_items_after_second_interaction == total_items_after, "opened chest cannot grant loot twice")
+	var counts_before_all = inventory.item_counts.duplicate()
+	all_chest.interact(player)
+	await create_timer(0.6).timeout
+	var all_items_granted = true
+	for item_id in database.list_all_item_ids():
+		if int(inventory.item_counts.get(item_id, 0)) != int(counts_before_all.get(item_id, 0)) + 1:
+			all_items_granted = false
+	_expect(all_chest.is_open and all_items_granted, "treasure chest grants one of every item")
+	_expect(all_chest.lid_pivot.rotation_degrees.x > 90.0, "treasure chest remains visibly open")
 
 	var position_before_walk = player.global_position
 	Input.action_press("move_forward")

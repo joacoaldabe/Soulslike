@@ -4,6 +4,7 @@ const PlayerScene = preload("res://scenes/Player.tscn")
 const EnemyScene = preload("res://scenes/Enemy.tscn")
 const BonfireScene = preload("res://scenes/Bonfire.tscn")
 const BloodstainScene = preload("res://scenes/Bloodstain.tscn")
+const ChestScene = preload("res://scenes/Chest.tscn")
 const UIScene = preload("res://scenes/UI.tscn")
 
 var player = null
@@ -22,6 +23,7 @@ func _ready():
 	randomize()
 	_create_world()
 	_spawn_bonfires()
+	_spawn_chests()
 	ui = UIScene.instantiate()
 	add_child(ui)
 	ui.character_selected.connect(_on_character_selected)
@@ -196,6 +198,18 @@ func _spawn_bonfires():
 		bonfire.bonfire_id = bonfire_data.bonfire_id
 		bonfire.position = bonfire_data.position
 		add_child(bonfire)
+
+func _spawn_chests():
+	for chest_data in [
+		{"id":"courtyard_cache", "mode":"random", "position":Vector3(-8.2,0.0,-5.4), "rotation":18.0},
+		{"id":"royal_treasury", "mode":"all", "position":Vector3(7.4,0.0,-14.8), "rotation":-28.0}
+	]:
+		var chest = ChestScene.instantiate()
+		chest.chest_id = chest_data["id"]
+		chest.loot_mode = chest_data["mode"]
+		chest.position = chest_data["position"]
+		chest.rotation_degrees.y = chest_data["rotation"]
+		add_child(chest)
 
 func _on_character_selected(class_id):
 	if GameState.create_character(class_id):

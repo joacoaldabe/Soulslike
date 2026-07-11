@@ -123,7 +123,7 @@ func _run():
 	_reset_player_action()
 	game_state.health = game_state.max_health
 	dodge_enemy._begin_attack(player)
-	await create_timer(dodge_enemy.data.attack_windup - 0.09).timeout
+	await create_timer(dodge_enemy.data.attack_windup - 0.14).timeout
 	player._start_roll()
 	health_before = game_state.health
 	await create_timer(0.38).timeout

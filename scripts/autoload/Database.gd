@@ -96,6 +96,14 @@ func list_enemies():
 func list_bonfires():
 	return bonfires.values()
 
+func list_all_item_ids():
+	var result = []
+	result.append_array(weapons.keys())
+	result.append_array(armors.keys())
+	result.append_array(rings.keys())
+	result.append_array(consumables.keys())
+	return result
+
 func get_character_class(class_id):
 	return classes.get(class_id)
 
