@@ -10,6 +10,6 @@ description = "Rapido, fragil y orientado a destreza."
 level = 5
 attributes = {"attunement": 11, "dexterity": 15, "endurance": 9, "faith": 10, "intelligence": 12, "resistance": 11, "strength": 9, "vitality": 9}
 starting_weapon = "longsword"
-starting_armor = "cloth_set"
+starting_armor = "thief_set"
 starting_ring = ""
 starting_items = ["green_estus", "soul_shard"]

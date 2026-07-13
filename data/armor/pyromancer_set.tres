@@ -1,0 +1,11 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ArmorData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+item_id = "pyromancer_set"
+display_name = "Pyromancer Garb"
+description = "Vestiduras resistentes al calor y cubiertas de ceniza."
+defense = 6
+weight = 1.0

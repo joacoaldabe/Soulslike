@@ -10,6 +10,6 @@ description = "Superviviente con buena destreza y resistencia."
 level = 4
 attributes = {"attunement": 9, "dexterity": 14, "endurance": 11, "faith": 9, "intelligence": 9, "resistance": 11, "strength": 12, "vitality": 11}
 starting_weapon = "winged_spear"
-starting_armor = "leather_set"
+starting_armor = "hunter_set"
 starting_ring = ""
 starting_items = ["green_estus"]

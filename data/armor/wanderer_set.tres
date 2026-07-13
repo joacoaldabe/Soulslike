@@ -1,0 +1,11 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ArmorData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+item_id = "wanderer_set"
+display_name = "Wanderer Coat"
+description = "Abrigo flexible de viaje con proteccion ligera."
+defense = 7
+weight = 1.1

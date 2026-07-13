@@ -1,12 +1,27 @@
 extends CanvasLayer
 
+const PlayerModelScene = preload("res://scenes/PlayerModel.tscn")
+const CHARACTER_CLASS_ORDER = ["warrior", "knight", "wanderer", "thief", "bandit", "hunter", "sorcerer", "pyromancer", "cleric", "deprived"]
+
 signal character_selected(class_id)
 signal rest_requested
 signal travel_requested(bonfire_id)
 
 var creator_panel = null
-var class_option = null
+var creator_backdrop = null
+var creator_columns = null
+var creator_root = null
+var creator_stats_labels = {}
+var creator_equipment_label = null
+var class_list = null
 var class_details = null
+var creator_preview_container = null
+var creator_preview_viewport = null
+var creator_preview_model: PlayerModel = null
+var creator_left_column = null
+var creator_middle_column = null
+var creator_right_column = null
+var creator_start_button = null
 var hud = null
 var health_label = null
 var health_bar = null
@@ -48,6 +63,7 @@ func _ready():
 	Inventory.equipment_changed.connect(_refresh_inventory)
 	_refresh_hud()
 	_refresh_inventory()
+	get_viewport().size_changed.connect(_update_creator_layout)
 
 func _apply_visual_theme():
 	var theme = Theme.new()
@@ -95,37 +111,184 @@ func _apply_visual_theme():
 	set_meta("stamina_fill", stamina_fill)
 
 func _build_creator():
+	creator_backdrop = ColorRect.new()
+	creator_backdrop.name = "CreatorBackdrop"
+	creator_backdrop.color = Color(0.025, 0.03, 0.035, 0.985)
+	creator_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(creator_backdrop)
+	var center = CenterContainer.new()
+	center.name = "CreatorCenter"
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	creator_backdrop.add_child(center)
 	creator_panel = PanelContainer.new()
 	creator_panel.theme = visual_theme
 	creator_panel.name = "CharacterCreator"
-	creator_panel.set_anchors_preset(Control.PRESET_CENTER)
-	creator_panel.custom_minimum_size = Vector2(520, 520)
-	add_child(creator_panel)
-
-	var box = VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
-	creator_panel.add_child(box)
+	center.add_child(creator_panel)
+	var scroll = ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	creator_panel.add_child(scroll)
+	creator_root = VBoxContainer.new()
+	creator_root.add_theme_constant_override("separation", 12)
+	creator_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(creator_root)
 	var title = Label.new()
-	title.text = "Crear personaje"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
-	class_option = OptionButton.new()
-	box.add_child(class_option)
-	for class_data in Database.list_classes():
-		class_option.add_item(class_data.display_name)
-		class_option.set_item_metadata(class_option.get_item_count() - 1, class_data.class_id)
-	if class_option.get_item_count() > 0:
-		class_option.select(0)
+	title.text = "CREAR PERSONAJE"
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color("ddd5c2"))
+	creator_root.add_child(title)
+	var subtitle = Label.new()
+	subtitle.text = "Selecciona una clase inicial"
+	subtitle.add_theme_font_size_override("font_size", 15)
+	subtitle.add_theme_color_override("font_color", Color("9b927f"))
+	creator_root.add_child(subtitle)
+	creator_root.add_child(HSeparator.new())
+	creator_columns = BoxContainer.new()
+	creator_columns.add_theme_constant_override("separation", 16)
+	creator_columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	creator_root.add_child(creator_columns)
+
+	creator_left_column = VBoxContainer.new()
+	creator_left_column.add_theme_constant_override("separation", 8)
+	creator_columns.add_child(creator_left_column)
+	_add_creator_heading(creator_left_column, "ESTADISTICAS")
+	var stats_grid = GridContainer.new()
+	stats_grid.columns = 2
+	stats_grid.add_theme_constant_override("h_separation", 20)
+	stats_grid.add_theme_constant_override("v_separation", 8)
+	creator_left_column.add_child(stats_grid)
+	var stat_rows = [["level", "Nivel"]]
+	for attribute_name in GameState.ATTRIBUTES:
+		stat_rows.append([attribute_name, GameState.ATTRIBUTE_LABELS[attribute_name]])
+	for stat_data in stat_rows:
+		var stat_name = Label.new()
+		stat_name.text = stat_data[1]
+		stat_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stats_grid.add_child(stat_name)
+		var stat_value = Label.new()
+		stat_value.text = "0"
+		stat_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		stat_value.add_theme_color_override("font_color", Color("e5c77e"))
+		stats_grid.add_child(stat_value)
+		creator_stats_labels[stat_data[0]] = stat_value
+	creator_left_column.add_child(HSeparator.new())
+	creator_equipment_label = Label.new()
+	creator_equipment_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	creator_equipment_label.add_theme_font_size_override("font_size", 15)
+	creator_left_column.add_child(creator_equipment_label)
+
+	creator_middle_column = VBoxContainer.new()
+	creator_middle_column.add_theme_constant_override("separation", 8)
+	creator_columns.add_child(creator_middle_column)
+	_add_creator_heading(creator_middle_column, "CLASE")
+	class_list = ItemList.new()
+	class_list.name = "ClassList"
+	class_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	class_list.allow_reselect = true
+	creator_middle_column.add_child(class_list)
+	for class_id in CHARACTER_CLASS_ORDER:
+		var class_data = Database.get_character_class(class_id)
+		if class_data == null:
+			continue
+		class_list.add_item(class_data.display_name)
+		class_list.set_item_metadata(class_list.get_item_count() - 1, class_data.class_id)
 	class_details = RichTextLabel.new()
-	class_details.custom_minimum_size = Vector2(480, 360)
+	class_details.custom_minimum_size.y = 105
 	class_details.bbcode_enabled = true
-	box.add_child(class_details)
-	var start_button = Button.new()
-	start_button.text = "Comenzar"
-	box.add_child(start_button)
-	class_option.item_selected.connect(_refresh_class_details)
-	start_button.pressed.connect(_confirm_character)
+	class_details.fit_content = false
+	creator_middle_column.add_child(class_details)
+
+	creator_right_column = VBoxContainer.new()
+	creator_right_column.add_theme_constant_override("separation", 8)
+	creator_columns.add_child(creator_right_column)
+	_add_creator_heading(creator_right_column, "APARIENCIA")
+	_build_creator_preview()
+	creator_start_button = Button.new()
+	creator_start_button.text = "Comenzar"
+	creator_start_button.custom_minimum_size.y = 46
+	creator_start_button.pressed.connect(_confirm_character)
+	creator_root.add_child(creator_start_button)
+	class_list.item_selected.connect(_refresh_class_details)
+	class_list.item_activated.connect(func(_index): _confirm_character())
+	if class_list.get_item_count() > 0:
+		class_list.select(0)
 	_refresh_class_details(0)
+	_update_creator_layout()
+
+func _add_creator_heading(parent: VBoxContainer, text: String):
+	var heading = Label.new()
+	heading.text = text
+	heading.add_theme_font_size_override("font_size", 16)
+	heading.add_theme_color_override("font_color", Color("c69b50"))
+	parent.add_child(heading)
+	parent.add_child(HSeparator.new())
+
+func _build_creator_preview():
+	creator_preview_container = SubViewportContainer.new()
+	creator_preview_container.name = "CharacterPreview"
+	creator_preview_container.stretch = true
+	creator_preview_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	creator_preview_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	creator_preview_container.gui_input.connect(_on_creator_preview_input)
+	creator_right_column.add_child(creator_preview_container)
+	creator_preview_viewport = SubViewport.new()
+	creator_preview_viewport.name = "PreviewViewport"
+	creator_preview_viewport.size = Vector2i(420, 500)
+	creator_preview_viewport.own_world_3d = true
+	creator_preview_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	creator_preview_container.add_child(creator_preview_viewport)
+	var world_environment = WorldEnvironment.new()
+	var environment = Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color("0b0e10")
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color("8d8170")
+	environment.ambient_light_energy = 0.72
+	world_environment.environment = environment
+	creator_preview_viewport.add_child(world_environment)
+	var key_light = DirectionalLight3D.new()
+	key_light.rotation_degrees = Vector3(-38, -32, 0)
+	key_light.light_color = Color("ffd8a2")
+	key_light.light_energy = 1.45
+	creator_preview_viewport.add_child(key_light)
+	var rim_light = DirectionalLight3D.new()
+	rim_light.rotation_degrees = Vector3(-20, 145, 0)
+	rim_light.light_color = Color("8ca3b8")
+	rim_light.light_energy = 0.75
+	creator_preview_viewport.add_child(rim_light)
+	var camera = Camera3D.new()
+	camera.position = Vector3(0, 1.15, -4.65)
+	camera.fov = 35.0
+	camera.look_at_from_position(camera.position, Vector3(0, 1.05, 0), Vector3.UP)
+	creator_preview_viewport.add_child(camera)
+	creator_preview_model = PlayerModelScene.instantiate()
+	creator_preview_model.name = "PreviewModel"
+	creator_preview_model.position = Vector3(0, -0.05, 0)
+	creator_preview_viewport.add_child(creator_preview_model)
+
+func _on_creator_preview_input(event):
+	if event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT and creator_preview_model != null:
+		creator_preview_model.rotate_y(-event.relative.x * 0.012)
+
+func _update_creator_layout():
+	if creator_panel == null:
+		return
+	var viewport_size = get_viewport().get_visible_rect().size
+	var panel_width: float = min(1420.0, max(300.0, viewport_size.x - 24.0))
+	var panel_height: float = min(820.0, max(280.0, viewport_size.y - 24.0))
+	creator_panel.custom_minimum_size = Vector2(panel_width, panel_height)
+	creator_root.custom_minimum_size.x = max(250.0, panel_width - 44.0)
+	var compact := panel_width < 820.0
+	creator_columns.vertical = compact
+	for column in [creator_left_column, creator_middle_column, creator_right_column]:
+		column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		column.custom_minimum_size.x = 0.0 if compact else (panel_width - 92.0) / 3.0
+	creator_left_column.custom_minimum_size.y = 270.0 if compact else 0.0
+	creator_middle_column.custom_minimum_size.y = 390.0 if compact else 0.0
+	creator_right_column.custom_minimum_size.y = 430.0 if compact else 0.0
+	class_list.custom_minimum_size.y = 265.0 if compact else 310.0
+	creator_preview_container.custom_minimum_size.y = 360.0 if compact else 430.0
 
 func _build_hud():
 	hud = VBoxContainer.new()
@@ -339,38 +502,58 @@ func _build_notifications():
 	add_child(notification_label)
 
 func show_character_creator():
+	creator_backdrop.show()
 	creator_panel.show()
 	hud.hide()
 	inventory_panel.hide()
 	bonfire_panel.hide()
 	level_panel.hide()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_update_creator_layout()
+	if class_list != null:
+		class_list.grab_focus()
 
 func show_hud():
+	creator_backdrop.hide()
 	creator_panel.hide()
 	hud.show()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_refresh_hud()
 
 func _confirm_character():
-	var class_id = class_option.get_selected_metadata()
+	var selected = class_list.get_selected_items()
+	if selected.is_empty():
+		return
+	var class_id = class_list.get_item_metadata(selected[0])
 	emit_signal("character_selected", class_id)
 
-func _refresh_class_details(_index):
-	if class_option.get_item_count() == 0:
+func _refresh_class_details(index):
+	if class_list.get_item_count() == 0:
 		return
-	var selected_class_id = class_option.get_selected_metadata()
+	if index < 0 or index >= class_list.get_item_count():
+		index = 0
+	class_list.select(index)
+	var selected_class_id = class_list.get_item_metadata(index)
 	var class_data = Database.get_character_class(selected_class_id)
 	if class_data == null:
 		return
-	var text = "[b]%s[/b]\n%s\n\nNivel %d\n" % [class_data.display_name, class_data.description, class_data.level]
+	creator_stats_labels["level"].text = str(class_data.level)
 	for attribute_name in GameState.ATTRIBUTES:
-		text += "%s: %d\n" % [GameState.ATTRIBUTE_LABELS[attribute_name], int(class_data.attributes.get(attribute_name, 1))]
-	text += "\nEquipo inicial: %s, %s" % [
-		Database.get_item(class_data.starting_weapon).display_name,
-		Database.get_item(class_data.starting_armor).display_name
+		creator_stats_labels[attribute_name].text = str(int(class_data.attributes.get(attribute_name, 1)))
+	var weapon = Database.get_item(class_data.starting_weapon)
+	var armor = Database.get_item(class_data.starting_armor)
+	creator_equipment_label.text = "EQUIPO INICIAL\n%s\n%s\n\nDefensa: %d    Peso: %.1f" % [
+		weapon.display_name if weapon != null else "Sin arma",
+		armor.display_name if armor != null else "Sin armadura",
+		armor.defense if armor != null else 0,
+		armor.weight if armor != null else 0.0
 	]
-	class_details.text = text
+	class_details.text = "[b]%s[/b]\n%s" % [class_data.display_name, class_data.description]
+	if creator_preview_model != null:
+		creator_preview_model.rotation = Vector3.ZERO
+		creator_preview_model.set_character_class(class_data.class_id)
+		creator_preview_model.set_equipped_weapon(weapon)
+		creator_preview_model.set_equipped_armor(armor)
 
 func _refresh_hud():
 	if health_bar == null:

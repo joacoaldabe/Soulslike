@@ -1,0 +1,11 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ArmorData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+item_id = "thief_set"
+display_name = "Thief Garb"
+description = "Vestimenta oscura que prioriza movilidad y sigilo."
+defense = 5
+weight = 0.8

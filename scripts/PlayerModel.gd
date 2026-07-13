@@ -140,20 +140,34 @@ func set_equipped_armor(armor):
 	pending_armor = armor
 	if not slots.has("chest_armor"):
 		return
-	for slot_name in ["head_armor", "chest_armor", "hips_armor", "left_shoulder_armor", "right_shoulder_armor", "left_forearm_armor", "right_forearm_armor", "left_foot_armor", "right_foot_armor"]:
+	for slot_name in ["head_armor", "face_armor", "chest_armor", "back_armor", "hips_armor", "left_shoulder_armor", "right_shoulder_armor", "left_forearm_armor", "right_forearm_armor", "left_hand_armor", "right_hand_armor", "left_foot_armor", "right_foot_armor"]:
 		_clear_slot(slot_name)
 	if character_class_id == "deprived" or armor == null:
 		_build_deprived_look()
-	elif armor.item_id == "knight_set":
-		_build_heavy_armor()
-	elif character_class_id in ["warrior", "bandit"]:
-		_build_medium_armor()
-	elif character_class_id in ["sorcerer", "pyromancer", "cleric"]:
-		_build_robes()
-	elif armor.item_id == "cloth_set":
-		_build_robes()
 	else:
-		_build_leather_armor()
+		match armor.item_id:
+			"knight_set":
+				_build_heavy_armor()
+			"leather_set":
+				_build_medium_armor()
+			"wanderer_set":
+				_build_wanderer_armor()
+			"thief_set":
+				_build_thief_armor()
+			"bandit_set":
+				_build_bandit_armor()
+			"hunter_set":
+				_build_hunter_armor()
+			"sorcerer_set":
+				_build_sorcerer_armor()
+			"pyromancer_set":
+				_build_pyromancer_armor()
+			"cleric_set":
+				_build_cleric_armor()
+			"cloth_set":
+				_build_deprived_look()
+			_:
+				_build_leather_armor()
 
 func set_character_class(class_id: String):
 	character_class_id = class_id
@@ -674,6 +688,92 @@ func _build_robes():
 	VisualLibrary.add_part(slots["hips_armor"],skirt,Vector3(0,-0.28,0))
 	var hood = VisualLibrary.tapered(Vector2(0.23,0.21),Vector2(0.17,0.16),0.40,materials["cloth"],"Hood")
 	VisualLibrary.add_part(slots["head_armor"],hood,Vector3(0,0.03,0.03))
+
+func _build_wanderer_armor():
+	var coat_material = _make_material(Color("34444a"), 1.0, 0.0)
+	var scarf_material = _make_material(Color("70543b"), 1.0, 0.0)
+	var coat = VisualLibrary.tapered(Vector2(0.31,0.18),Vector2(0.23,0.15),0.61,coat_material,"WandererCoat")
+	VisualLibrary.add_part(slots["chest_armor"],coat,Vector3(0,0,-0.02))
+	var tails = VisualLibrary.tapered(Vector2(0.24,0.16),Vector2(0.34,0.20),0.50,coat_material,"WandererCoatTails")
+	VisualLibrary.add_part(slots["hips_armor"],tails,Vector3(0,-0.23,0.03))
+	var scarf = VisualLibrary.tapered(Vector2(0.19,0.17),Vector2(0.23,0.20),0.15,scarf_material,"WandererScarf")
+	VisualLibrary.add_part(slots["head_armor"],scarf,Vector3(0,-0.12,0))
+	var shoulder = VisualLibrary.tapered(Vector2(0.10,0.14),Vector2(0.17,0.19),0.16,materials["dark_leather"],"WandererShoulder")
+	VisualLibrary.add_part(slots["left_shoulder_armor"],shoulder)
+
+func _build_thief_armor():
+	var shadow_cloth = _make_material(Color("171a1c"), 1.0, 0.0)
+	var vest = VisualLibrary.tapered(Vector2(0.28,0.16),Vector2(0.21,0.14),0.54,materials["dark_leather"],"ThiefVest")
+	VisualLibrary.add_part(slots["chest_armor"],vest,Vector3(0,0,-0.02))
+	var hood = VisualLibrary.tapered(Vector2(0.22,0.20),Vector2(0.16,0.15),0.37,shadow_cloth,"ThiefHood")
+	VisualLibrary.add_part(slots["head_armor"],hood,Vector3(0,0.03,0.03))
+	var mask = VisualLibrary.box(Vector3(0.27,0.12,0.035),shadow_cloth,"ThiefMask")
+	VisualLibrary.add_part(slots["face_armor"],mask,Vector3(0,-0.07,-0.02))
+	for side in ["left", "right"]:
+		var wrap = VisualLibrary.tapered(Vector2(0.075,0.08),Vector2(0.095,0.10),0.29,shadow_cloth,"ThiefArmWrap")
+		VisualLibrary.add_part(slots[side + "_forearm_armor"],wrap,Vector3(0,-0.16,0))
+
+func _build_bandit_armor():
+	var hide_material = _make_material(Color("5a3023"), 1.0, 0.0)
+	var harness = VisualLibrary.tapered(Vector2(0.32,0.18),Vector2(0.22,0.15),0.48,hide_material,"BanditHarness")
+	VisualLibrary.add_part(slots["chest_armor"],harness,Vector3(0,0.04,-0.01))
+	for angle in [-24.0, 24.0]:
+		var strap = VisualLibrary.box(Vector3(0.10,0.55,0.04),materials["dark_leather"],"BanditCrossStrap")
+		VisualLibrary.add_part(slots["chest_armor"],strap,Vector3(0,0,-0.20),Vector3(0,0,angle))
+	var shoulder = VisualLibrary.tapered(Vector2(0.14,0.18),Vector2(0.22,0.24),0.19,materials["dark_metal"],"BanditPauldron")
+	VisualLibrary.add_part(slots["right_shoulder_armor"],shoulder)
+	var waist_hide = VisualLibrary.tapered(Vector2(0.24,0.16),Vector2(0.35,0.22),0.40,hide_material,"BanditWaistHide")
+	VisualLibrary.add_part(slots["hips_armor"],waist_hide,Vector3(0,-0.18,0))
+
+func _build_hunter_armor():
+	var green_cloth = _make_material(Color("35453a"), 1.0, 0.0)
+	var jerkin = VisualLibrary.tapered(Vector2(0.30,0.17),Vector2(0.22,0.15),0.57,materials["leather"],"HunterJerkin")
+	VisualLibrary.add_part(slots["chest_armor"],jerkin,Vector3(0,0,-0.02))
+	var cape = VisualLibrary.tapered(Vector2(0.24,0.03),Vector2(0.38,0.04),0.74,green_cloth,"HunterCape")
+	VisualLibrary.add_part(slots["back_armor"],cape,Vector3(0,-0.10,0.04),Vector3(4,0,180))
+	var hood = VisualLibrary.tapered(Vector2(0.23,0.21),Vector2(0.17,0.16),0.39,green_cloth,"HunterHood")
+	VisualLibrary.add_part(slots["head_armor"],hood,Vector3(0,0.03,0.03))
+	var shoulder = VisualLibrary.tapered(Vector2(0.10,0.14),Vector2(0.17,0.20),0.16,materials["leather"],"HunterShoulder")
+	VisualLibrary.add_part(slots["right_shoulder_armor"],shoulder)
+
+func _build_sorcerer_armor():
+	var arcane_cloth = _make_material(Color("25304f"), 1.0, 0.0)
+	var silver = _make_material(Color("72798a"), 0.72, 0.18)
+	var robe = VisualLibrary.tapered(Vector2(0.30,0.18),Vector2(0.22,0.15),0.64,arcane_cloth,"SorcererRobe")
+	VisualLibrary.add_part(slots["chest_armor"],robe)
+	var skirt = VisualLibrary.tapered(Vector2(0.23,0.15),Vector2(0.38,0.24),0.68,arcane_cloth,"SorcererSkirt")
+	VisualLibrary.add_part(slots["hips_armor"],skirt,Vector3(0,-0.30,0))
+	var hood = VisualLibrary.tapered(Vector2(0.24,0.21),Vector2(0.12,0.12),0.52,arcane_cloth,"SorcererHood")
+	VisualLibrary.add_part(slots["head_armor"],hood,Vector3(0,0.09,0.04))
+	var collar = VisualLibrary.tapered(Vector2(0.27,0.20),Vector2(0.32,0.24),0.10,silver,"SorcererCollar")
+	VisualLibrary.add_part(slots["chest_armor"],collar,Vector3(0,0.27,0))
+
+func _build_pyromancer_armor():
+	var ash_red = _make_material(Color("63372a"), 1.0, 0.0)
+	var ember_cloth = _make_material(Color("2d2421"), 1.0, 0.0)
+	var wrap = VisualLibrary.tapered(Vector2(0.31,0.18),Vector2(0.22,0.15),0.56,ash_red,"PyromancerWrap")
+	VisualLibrary.add_part(slots["chest_armor"],wrap)
+	var skirt = VisualLibrary.tapered(Vector2(0.24,0.16),Vector2(0.36,0.23),0.57,ember_cloth,"PyromancerSkirt")
+	VisualLibrary.add_part(slots["hips_armor"],skirt,Vector3(0,-0.26,0))
+	var mantle = VisualLibrary.tapered(Vector2(0.13,0.18),Vector2(0.23,0.25),0.19,ash_red,"PyromancerMantle")
+	VisualLibrary.add_part(slots["left_shoulder_armor"],mantle)
+	var cowl = VisualLibrary.tapered(Vector2(0.23,0.21),Vector2(0.18,0.16),0.32,ember_cloth,"PyromancerCowl")
+	VisualLibrary.add_part(slots["head_armor"],cowl,Vector3(0,-0.02,0.03))
+
+func _build_cleric_armor():
+	var vestment = _make_material(Color("b7ad91"), 1.0, 0.0)
+	var sacred_red = _make_material(Color("70433a"), 1.0, 0.0)
+	var mail = VisualLibrary.tapered(Vector2(0.31,0.18),Vector2(0.23,0.16),0.58,materials["dark_metal"],"ClericMail")
+	VisualLibrary.add_part(slots["chest_armor"],mail)
+	var tabard = VisualLibrary.box(Vector3(0.31,0.69,0.045),vestment,"ClericTabard")
+	VisualLibrary.add_part(slots["chest_armor"],tabard,Vector3(0,-0.05,-0.21))
+	var skirt = VisualLibrary.tapered(Vector2(0.23,0.15),Vector2(0.34,0.22),0.52,vestment,"ClericVestmentSkirt")
+	VisualLibrary.add_part(slots["hips_armor"],skirt,Vector3(0,-0.24,0))
+	var cowl = VisualLibrary.tapered(Vector2(0.24,0.21),Vector2(0.18,0.16),0.30,sacred_red,"ClericCowl")
+	VisualLibrary.add_part(slots["head_armor"],cowl,Vector3(0,-0.02,0.03))
+	for side in ["left", "right"]:
+		var shoulder = VisualLibrary.tapered(Vector2(0.10,0.14),Vector2(0.17,0.19),0.15,materials["dark_metal"],"ClericMailShoulder")
+		VisualLibrary.add_part(slots[side + "_shoulder_armor"],shoulder)
 
 func _build_axe(parent):
 	_cylinder(parent, "AxeHandle", 0.038, 1.02, Vector3(0.0, -0.58, 0.0), materials["leather"], Vector3.ZERO, 6)

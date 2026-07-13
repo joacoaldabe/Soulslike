@@ -10,6 +10,6 @@ description = "Fragil, inteligente y dependiente de distancia."
 level = 3
 attributes = {"attunement": 15, "dexterity": 11, "endurance": 8, "faith": 8, "intelligence": 15, "resistance": 8, "strength": 9, "vitality": 8}
 starting_weapon = "mace"
-starting_armor = "cloth_set"
+starting_armor = "sorcerer_set"
 starting_ring = "stamina_ring"
 starting_items = ["green_estus", "soul_shard"]

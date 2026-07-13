@@ -10,6 +10,6 @@ description = "Aventurero flexible con atributos repartidos."
 level = 1
 attributes = {"attunement": 12, "dexterity": 9, "endurance": 12, "faith": 8, "intelligence": 10, "resistance": 12, "strength": 12, "vitality": 10}
 starting_weapon = "mace"
-starting_armor = "cloth_set"
+starting_armor = "pyromancer_set"
 starting_ring = ""
 starting_items = ["green_estus"]

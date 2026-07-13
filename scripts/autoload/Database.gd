@@ -23,7 +23,14 @@ const WEAPON_PATHS = [
 const ARMOR_PATHS = [
 	"res://data/armor/cloth_set.tres",
 	"res://data/armor/leather_set.tres",
-	"res://data/armor/knight_set.tres"
+	"res://data/armor/knight_set.tres",
+	"res://data/armor/wanderer_set.tres",
+	"res://data/armor/thief_set.tres",
+	"res://data/armor/bandit_set.tres",
+	"res://data/armor/hunter_set.tres",
+	"res://data/armor/sorcerer_set.tres",
+	"res://data/armor/pyromancer_set.tres",
+	"res://data/armor/cleric_set.tres"
 ]
 
 const RING_PATHS = [
