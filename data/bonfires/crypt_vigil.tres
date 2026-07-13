@@ -6,4 +6,4 @@
 script = ExtResource("1")
 bonfire_id = "crypt_vigil"
 display_name = "Vigilia de la Cripta"
-position = Vector3(0, -0.8, -134)
+position = Vector3(0, -0.8, -139)

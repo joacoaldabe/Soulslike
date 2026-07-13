@@ -17,9 +17,16 @@ var weapon_label = null
 var inventory_panel = null
 var inventory_lists = {}
 var bonfire_panel = null
+var bonfire_menu_id := ""
 var travel_option = null
-var level_attribute_option = null
-var level_cost_label = null
+var level_panel = null
+var level_attribute_list = null
+var level_overview_labels = {}
+var level_preview_labels = {}
+var level_weapon_label = null
+var level_scaling_label = null
+var level_effect_label = null
+var level_confirm_button = null
 var notification_label = null
 var visual_theme: Theme = null
 
@@ -30,6 +37,7 @@ func _ready():
 	_build_hud()
 	_build_inventory()
 	_build_bonfire_menu()
+	_build_level_up_menu()
 	_build_notifications()
 	GameState.health_changed.connect(_refresh_hud)
 	GameState.stamina_changed.connect(_refresh_hud)
@@ -64,6 +72,14 @@ func _apply_visual_theme():
 	hover.bg_color = Color(0.25,0.22,0.17,0.98)
 	hover.border_color = Color(0.72,0.57,0.33,1.0)
 	theme.set_stylebox("hover", "Button", hover)
+	var selected = button.duplicate()
+	selected.bg_color = Color(0.32,0.25,0.14,0.98)
+	selected.border_color = Color(0.82,0.66,0.34,1.0)
+	selected.set_border_width_all(1)
+	theme.set_stylebox("selected", "ItemList", selected)
+	theme.set_stylebox("selected_focus", "ItemList", selected)
+	theme.set_stylebox("hovered", "ItemList", hover)
+	theme.set_color("font_selected_color", "ItemList", Color("f1d58d"))
 	var health_fill = StyleBoxFlat.new()
 	health_fill.bg_color = Color("8f3038")
 	var stamina_fill = StyleBoxFlat.new()
@@ -176,7 +192,7 @@ func _build_bonfire_menu():
 	bonfire_panel = PanelContainer.new()
 	bonfire_panel.theme = visual_theme
 	bonfire_panel.set_anchors_preset(Control.PRESET_CENTER)
-	bonfire_panel.custom_minimum_size = Vector2(430, 360)
+	bonfire_panel.custom_minimum_size = Vector2(430, 330)
 	add_child(bonfire_panel)
 	var root = VBoxContainer.new()
 	root.add_theme_constant_override("separation", 8)
@@ -189,16 +205,9 @@ func _build_bonfire_menu():
 	rest_button.text = "Descansar"
 	rest_button.pressed.connect(func(): emit_signal("rest_requested"))
 	root.add_child(rest_button)
-	level_cost_label = Label.new()
-	root.add_child(level_cost_label)
-	level_attribute_option = OptionButton.new()
-	for attribute_name in GameState.ATTRIBUTES:
-		level_attribute_option.add_item(GameState.ATTRIBUTE_LABELS[attribute_name])
-		level_attribute_option.set_item_metadata(level_attribute_option.get_item_count() - 1, attribute_name)
-	root.add_child(level_attribute_option)
 	var level_button = Button.new()
 	level_button.text = "Subir nivel"
-	level_button.pressed.connect(_level_up_selected_attribute)
+	level_button.pressed.connect(open_level_up_menu)
 	root.add_child(level_button)
 	travel_option = OptionButton.new()
 	root.add_child(travel_option)
@@ -211,6 +220,115 @@ func _build_bonfire_menu():
 	close_button.pressed.connect(close_bonfire_menu)
 	root.add_child(close_button)
 	bonfire_panel.hide()
+
+func _build_level_up_menu():
+	level_panel = PanelContainer.new()
+	level_panel.name = "LevelUpPanel"
+	level_panel.theme = visual_theme
+	level_panel.set_anchors_preset(Control.PRESET_CENTER)
+	level_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	level_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	level_panel.custom_minimum_size = Vector2(1050, 610)
+	add_child(level_panel)
+	var root = VBoxContainer.new()
+	root.add_theme_constant_override("separation", 12)
+	level_panel.add_child(root)
+	var title = Label.new()
+	title.text = "SUBIR DE NIVEL"
+	title.add_theme_font_size_override("font_size", 27)
+	root.add_child(title)
+	var subtitle = Label.new()
+	subtitle.text = "Selecciona un atributo para previsualizar los cambios"
+	subtitle.modulate = Color(0.74, 0.70, 0.61)
+	root.add_child(subtitle)
+	root.add_child(HSeparator.new())
+	var columns = HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 12)
+	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(columns)
+	var attributes_box = _level_column(columns, "ATRIBUTOS", Vector2(300, 430))
+	for key in ["level", "souls", "cost"]:
+		var label = Label.new()
+		attributes_box.add_child(label)
+		level_overview_labels[key] = label
+	attributes_box.add_child(HSeparator.new())
+	level_attribute_list = ItemList.new()
+	level_attribute_list.custom_minimum_size = Vector2(270, 310)
+	level_attribute_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	level_attribute_list.allow_reselect = true
+	attributes_box.add_child(level_attribute_list)
+	for attribute_name in GameState.ATTRIBUTES:
+		level_attribute_list.add_item(GameState.ATTRIBUTE_LABELS[attribute_name])
+		level_attribute_list.set_item_metadata(level_attribute_list.get_item_count() - 1, attribute_name)
+	level_attribute_list.item_selected.connect(_refresh_level_preview)
+	var stats_box = _level_column(columns, "ESTADISTICAS", Vector2(390, 430))
+	var stat_header = GridContainer.new()
+	stat_header.columns = 3
+	stat_header.add_theme_constant_override("h_separation", 18)
+	stats_box.add_child(stat_header)
+	_add_level_grid_label(stat_header, "Parametro", 180)
+	_add_level_grid_label(stat_header, "Actual", 72, HORIZONTAL_ALIGNMENT_RIGHT)
+	_add_level_grid_label(stat_header, "Nuevo", 72, HORIZONTAL_ALIGNMENT_RIGHT)
+	stats_box.add_child(HSeparator.new())
+	var stats_grid = GridContainer.new()
+	stats_grid.columns = 3
+	stats_grid.add_theme_constant_override("h_separation", 18)
+	stats_grid.add_theme_constant_override("v_separation", 12)
+	stats_box.add_child(stats_grid)
+	for stat_data in [["health","Vida"],["stamina","Energia"],["defense","Reduccion de dano"],["light_damage","Ataque ligero"],["heavy_damage","Ataque fuerte"]]:
+		_add_level_grid_label(stats_grid, stat_data[1], 180)
+		var current = _add_level_grid_label(stats_grid, "0", 72, HORIZONTAL_ALIGNMENT_RIGHT)
+		var next = _add_level_grid_label(stats_grid, "0", 72, HORIZONTAL_ALIGNMENT_RIGHT)
+		level_preview_labels[stat_data[0]] = [current, next]
+	var equipment_box = _level_column(columns, "EQUIPO Y ESCALADO", Vector2(280, 430))
+	level_weapon_label = Label.new()
+	level_weapon_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	equipment_box.add_child(level_weapon_label)
+	equipment_box.add_child(HSeparator.new())
+	level_scaling_label = Label.new()
+	level_scaling_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	equipment_box.add_child(level_scaling_label)
+	equipment_box.add_child(HSeparator.new())
+	level_effect_label = Label.new()
+	level_effect_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	level_effect_label.modulate = Color(0.88, 0.78, 0.52)
+	equipment_box.add_child(level_effect_label)
+	var footer = HBoxContainer.new()
+	footer.alignment = BoxContainer.ALIGNMENT_END
+	footer.add_theme_constant_override("separation", 10)
+	root.add_child(footer)
+	var back_button = Button.new()
+	back_button.text = "Volver"
+	back_button.custom_minimum_size = Vector2(130, 42)
+	back_button.pressed.connect(close_level_up_menu)
+	footer.add_child(back_button)
+	level_confirm_button = Button.new()
+	level_confirm_button.text = "Confirmar nivel"
+	level_confirm_button.custom_minimum_size = Vector2(190, 42)
+	level_confirm_button.pressed.connect(_level_up_selected_attribute)
+	footer.add_child(level_confirm_button)
+	level_panel.hide()
+
+func _level_column(parent: HBoxContainer, title_text: String, minimum_size: Vector2) -> VBoxContainer:
+	var box = VBoxContainer.new()
+	box.custom_minimum_size = minimum_size
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", 9)
+	parent.add_child(box)
+	var title = Label.new()
+	title.text = title_text
+	title.modulate = Color(0.82, 0.68, 0.39)
+	box.add_child(title)
+	box.add_child(HSeparator.new())
+	return box
+
+func _add_level_grid_label(parent: GridContainer, text: String, width: float, alignment := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+	var label = Label.new()
+	label.text = text
+	label.custom_minimum_size.x = width
+	label.horizontal_alignment = alignment
+	parent.add_child(label)
+	return label
 
 func _build_notifications():
 	notification_label = Label.new()
@@ -225,6 +343,7 @@ func show_character_creator():
 	hud.hide()
 	inventory_panel.hide()
 	bonfire_panel.hide()
+	level_panel.hide()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func show_hud():
@@ -265,8 +384,6 @@ func _refresh_hud():
 	souls_label.text = "%d souls    Nivel %d" % [GameState.souls, GameState.level]
 	var weapon = Inventory.get_equipped_weapon()
 	weapon_label.text = "Arma: %s" % (weapon.display_name if weapon != null else "Sin arma")
-	if level_cost_label != null:
-		level_cost_label.text = "Costo de nivel: %d souls" % GameState.get_level_cost()
 
 func _refresh_inventory():
 	if inventory_panel == null:
@@ -303,7 +420,7 @@ func _activate_inventory_item(item_type, index):
 func toggle_inventory():
 	if not GameState.character_ready:
 		return
-	if bonfire_panel.visible or creator_panel.visible:
+	if bonfire_panel.visible or level_panel.visible or creator_panel.visible:
 		return
 	if inventory_panel.visible:
 		close_inventory()
@@ -314,19 +431,22 @@ func toggle_inventory():
 
 func close_inventory():
 	inventory_panel.hide()
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if bonfire_panel.visible or creator_panel.visible else Input.MOUSE_MODE_CAPTURED
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if bonfire_panel.visible or level_panel.visible or creator_panel.visible else Input.MOUSE_MODE_CAPTURED
 
 func is_blocking_gameplay():
-	return creator_panel.visible or inventory_panel.visible or bonfire_panel.visible
+	return creator_panel.visible or inventory_panel.visible or bonfire_panel.visible or level_panel.visible
 
-func open_bonfire_menu(_bonfire_id):
+func open_bonfire_menu(selected_bonfire_id):
+	bonfire_menu_id = str(selected_bonfire_id)
 	_refresh_travel_options()
 	_refresh_hud()
+	level_panel.hide()
 	bonfire_panel.show()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func close_bonfire_menu():
 	bonfire_panel.hide()
+	level_panel.hide()
 	get_tree().call_group("player", "end_bonfire_rest")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -339,13 +459,72 @@ func _refresh_travel_options():
 		travel_option.add_item(bonfire.display_name)
 		travel_option.set_item_metadata(travel_option.get_item_count() - 1, bonfire_id)
 
+func open_level_up_menu():
+	bonfire_panel.hide()
+	level_panel.show()
+	if level_attribute_list.get_item_count() > 0:
+		if level_attribute_list.get_selected_items().is_empty():
+			level_attribute_list.select(0)
+		_refresh_level_preview(level_attribute_list.get_selected_items()[0])
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func close_level_up_menu():
+	level_panel.hide()
+	bonfire_panel.show()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func _refresh_level_preview(index := -1):
+	if level_attribute_list == null or level_attribute_list.get_item_count() == 0:
+		return
+	if index < 0:
+		var selected = level_attribute_list.get_selected_items()
+		index = selected[0] if not selected.is_empty() else 0
+	level_attribute_list.select(index)
+	var attribute_name: String = level_attribute_list.get_item_metadata(index)
+	var preview = GameState.get_level_preview(attribute_name)
+	var current = preview["current"]
+	var next = preview["next"]
+	level_overview_labels["level"].text = "Nivel                 %d  >  %d" % [current["level"], next["level"]]
+	level_overview_labels["souls"].text = "Souls                 %d  >  %d" % [current["souls"], next["souls"]]
+	level_overview_labels["cost"].text = "Souls requeridas      %d" % preview["cost"]
+	for item_index in range(level_attribute_list.get_item_count()):
+		var item_attribute: String = level_attribute_list.get_item_metadata(item_index)
+		var value = GameState.get_attribute(item_attribute)
+		level_attribute_list.set_item_text(item_index, "%s        %d%s" % [GameState.ATTRIBUTE_LABELS[item_attribute], value, "  >  %d" % (value + 1) if item_attribute == attribute_name else ""])
+	for stat_name in level_preview_labels.keys():
+		var labels = level_preview_labels[stat_name]
+		labels[0].text = str(current[stat_name])
+		labels[1].text = str(next[stat_name])
+		labels[1].modulate = Color(0.45, 0.78, 0.95) if next[stat_name] != current[stat_name] else Color(0.62, 0.62, 0.59)
+	var weapon = Inventory.get_equipped_weapon()
+	if weapon == null:
+		level_weapon_label.text = "Arma equipada\nSin arma"
+		level_scaling_label.text = "Escalado\nNinguno"
+	else:
+		level_weapon_label.text = "Arma equipada\n%s\n\nDano base: %d" % [weapon.display_name, weapon.base_damage]
+		var scaling_parts = []
+		for scaling_attribute in weapon.scaling.keys():
+			scaling_parts.append("%s %s" % [GameState.ATTRIBUTE_LABELS.get(scaling_attribute, scaling_attribute), weapon.scaling[scaling_attribute]])
+		level_scaling_label.text = "Escalado del arma\n%s" % (", ".join(scaling_parts) if not scaling_parts.is_empty() else "Sin escalado")
+	var changed_stats = []
+	for stat_data in [["health","vida maxima"],["stamina","energia maxima"],["defense","reduccion de dano"],["light_damage","ataque ligero"],["heavy_damage","ataque fuerte"]]:
+		if next[stat_data[0]] != current[stat_data[0]]:
+			changed_stats.append("%s +%d" % [stat_data[1], next[stat_data[0]] - current[stat_data[0]]])
+	level_effect_label.text = "%s mejora:\n%s" % [GameState.ATTRIBUTE_LABELS[attribute_name], "\n".join(changed_stats) if not changed_stats.is_empty() else "Actualmente no modifica otra estadistica derivada."]
+	level_confirm_button.disabled = GameState.souls < int(preview["cost"])
+	level_confirm_button.text = "Confirmar nivel" if not level_confirm_button.disabled else "Souls insuficientes"
+
 func _level_up_selected_attribute():
-	var attribute_name = level_attribute_option.get_selected_metadata()
+	var selected = level_attribute_list.get_selected_items()
+	if selected.is_empty():
+		return
+	var attribute_name = level_attribute_list.get_item_metadata(selected[0])
 	if GameState.level_up(attribute_name):
 		notify("Subiste %s." % GameState.ATTRIBUTE_LABELS[attribute_name])
 	else:
 		notify("No tenes souls suficientes.")
 	_refresh_hud()
+	_refresh_level_preview(selected[0])
 
 func _travel_to_selected_bonfire():
 	if travel_option.get_item_count() == 0:

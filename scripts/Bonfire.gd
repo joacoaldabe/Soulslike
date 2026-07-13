@@ -69,8 +69,10 @@ func _setup_visuals():
 	add_child(particles)
 
 func interact(player):
-	GameState.discover_bonfire(bonfire_id, global_position)
-	GameState.restore_at_bonfire()
+	GameState.discover_bonfire(bonfire_id, global_position, false)
 	if player != null and player.has_method("begin_bonfire_rest"):
 		player.begin_bonfire_rest(global_position)
 	get_tree().call_group("ui", "open_bonfire_menu", bonfire_id)
+
+func get_spawn_position() -> Vector3:
+	return global_position

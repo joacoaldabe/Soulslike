@@ -29,10 +29,54 @@ func _ready():
 	ui.rest_requested.connect(_on_rest_requested)
 	GameState.player_died.connect(_on_player_died)
 	GameState.bloodstain_changed.connect(_refresh_bloodstain)
+	_start_requested_session()
+
+func _start_requested_session():
+	if GameSession.start_mode == GameSession.StartMode.LOAD_GAME:
+		var save_data = GameSession.take_pending_save()
+		if save_data != null and _apply_loaded_game(save_data):
+			_start_level()
+			return
+		push_error("Main: no se pudo aplicar la partida cargada.")
+		ui.show_character_creator()
+		return
+	if GameSession.start_mode == GameSession.StartMode.NEW_GAME:
+		GameSession.finish_new_game_start()
+		ui.show_character_creator()
+		return
 	if GameState.character_ready:
 		_start_level()
 	else:
 		ui.show_character_creator()
+
+func _apply_loaded_game(save_data: Dictionary) -> bool:
+	var player_data = save_data.get("player", {})
+	var inventory_data = save_data.get("inventory", {})
+	var world_data = save_data.get("world", {})
+	var saved_class_id := str(player_data.get("class_id", "knight"))
+	if Database.get_character_class(saved_class_id) == null:
+		push_warning("Main: la clase guardada '%s' no existe; se usa knight." % saved_class_id)
+		saved_class_id = "knight"
+	if not GameState.create_character(saved_class_id):
+		return false
+	if not Inventory.apply_save_data(inventory_data):
+		return false
+	if not GameState.apply_save_data(player_data, world_data):
+		return false
+	_resolve_loaded_bonfire()
+	return true
+
+func _resolve_loaded_bonfire():
+	for bonfire in get_tree().get_nodes_in_group("bonfires"):
+		if bonfire.get("bonfire_id") == GameState.current_bonfire_id:
+			GameState.current_bonfire_position = bonfire.global_position
+			return
+	push_warning("Main: el bonfire '%s' no esta en el mundo; se usa ash_camp." % GameState.current_bonfire_id)
+	var fallback = Database.get_bonfire("ash_camp")
+	if fallback != null:
+		GameState.current_bonfire_id = fallback.bonfire_id
+		GameState.current_bonfire_position = fallback.position
+		GameState.discovered_bonfires[fallback.bonfire_id] = true
 
 func _create_world():
 	var world_environment = WorldEnvironment.new()
@@ -236,9 +280,22 @@ func _on_player_died(_position):
 	ui.notify("Perdiste tus souls. Recuperalas en la mancha verde.")
 
 func _on_rest_requested():
-	GameState.restore_at_bonfire()
+	var bonfire_id: String = ui.bonfire_menu_id if ui != null else ""
+	var bonfire = _find_bonfire(bonfire_id)
+	if bonfire == null or not GameState.rest_at_bonfire(bonfire_id, bonfire.global_position):
+		ui.notify("No se pudo descansar en este bonfire.")
+		return
 	_respawn_enemies()
-	ui.notify("Descansaste en el bonfire.")
+	if SaveManager.save_game():
+		ui.notify("Descansaste. Partida guardada.")
+	else:
+		ui.notify("Descansaste, pero no se pudo guardar la partida.")
+
+func _find_bonfire(bonfire_id: String):
+	for bonfire in get_tree().get_nodes_in_group("bonfires"):
+		if bonfire.get("bonfire_id") == bonfire_id:
+			return bonfire
+	return null
 
 func _on_travel_requested(bonfire_id):
 	if GameState.travel_to_bonfire(bonfire_id):
@@ -258,6 +315,7 @@ func spawn_combat_impact(position: Vector3, direction: Vector3, impact_type: Str
 	var particles = GPUParticles3D.new()
 	particles.name = "CombatImpact"
 	particles.one_shot = true
+	particles.emitting = false
 	particles.amount = 9 if impact_type == "heavy" or impact_type.contains("brute") else 5
 	particles.lifetime = 0.28
 	particles.explosiveness = 1.0
@@ -277,7 +335,35 @@ func spawn_combat_impact(position: Vector3, direction: Vector3, impact_type: Str
 	particles.draw_pass_1 = spark
 	add_child(particles)
 	particles.global_position = position
+	particles.restart()
 	particles.emitting = true
+	var blood = GPUParticles3D.new()
+	blood.name = "BloodImpact"
+	blood.one_shot = true
+	blood.emitting = false
+	blood.amount = 14 if impact_type == "heavy" or impact_type.contains("brute") else 9
+	blood.lifetime = 0.42
+	blood.explosiveness = 1.0
+	var blood_process = ParticleProcessMaterial.new()
+	blood_process.direction = (direction + Vector3.UP * 0.38).normalized()
+	blood_process.spread = 28.0
+	blood_process.initial_velocity_min = 1.1
+	blood_process.initial_velocity_max = 2.5
+	blood_process.gravity = Vector3(0.0, -6.5, 0.0)
+	blood_process.scale_min = 0.65
+	blood_process.scale_max = 1.25
+	blood.process_material = blood_process
+	var drop = SphereMesh.new()
+	drop.radius = 0.045
+	drop.height = 0.16
+	drop.material = VisualLibrary.material("blood")
+	blood.draw_pass_1 = drop
+	add_child(blood)
+	blood.global_position = position
+	blood.restart()
+	blood.emitting = true
 	await get_tree().create_timer(0.55, true, false, true).timeout
 	if is_instance_valid(particles):
 		particles.queue_free()
+	if is_instance_valid(blood):
+		blood.queue_free()

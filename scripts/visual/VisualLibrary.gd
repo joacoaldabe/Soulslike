@@ -12,7 +12,7 @@ static func material(id: String) -> Material:
 		"rust": Color("674238"), "leather": Color("493127"), "wood": Color("392b24"),
 		"cloth": Color("343337"), "cloth_red": Color("54383b"), "cloth_blue": Color("35424d"),
 		"moss": Color("3f4a3b"), "skin": Color("9b7560"), "bone": Color("a59b7d"),
-		"fire": Color("ff7624"), "souls": Color("55e889")
+		"fire": Color("ff7624"), "souls": Color("55e889"), "blood": Color("6f1018")
 	}
 	if id in ["stone", "stone_light", "stone_dark", "wet_stone"]:
 		var stone = _stone_material(colors[id], id == "wet_stone")
@@ -22,10 +22,10 @@ static func material(id: String) -> Material:
 	m.albedo_color = colors.get(id, Color("777777"))
 	m.roughness = 0.62 if id.contains("metal") else 0.94
 	m.metallic = 0.65 if id.contains("metal") else 0.0
-	if id in ["fire", "souls"]:
+	if id in ["fire", "souls", "blood"]:
 		m.emission_enabled = true
 		m.emission = m.albedo_color
-		m.emission_energy_multiplier = 2.2
+		m.emission_energy_multiplier = 1.15 if id == "blood" else 2.2
 	_materials[id] = m
 	return m
 

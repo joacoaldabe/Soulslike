@@ -126,7 +126,7 @@ func _run():
 	inventory.emit_signal("equipment_changed")
 
 	var original_position = player.global_position
-	player.global_position = Vector3(-8.0,0.0,1.35)
+	player.global_position = Vector3(-8.0,0.0,-1.35)
 	player.rotation.y = 0.0
 	player.camera_pivot.rotation.y = 0.0
 	player.camera_pivot.global_position = player.global_position + Vector3.UP * player.camera_pivot_height

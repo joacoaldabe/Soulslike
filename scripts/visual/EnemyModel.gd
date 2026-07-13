@@ -57,8 +57,8 @@ func flash_hit():
 
 func play_hit(direction: Vector3, severity: String = "light"):
 	hit_direction = direction
-	hit_strength = 1.5 if severity == "stagger" or severity == "heavy" else 1.0
-	hit_timer = 0.28 if hit_strength > 1.0 else 0.18
+	hit_strength = 1.9 if severity == "stagger" or severity == "heavy" else 1.35
+	hit_timer = 0.38 if hit_strength > 1.5 else 0.27
 
 func set_combat_state(new_state: String, progress: float):
 	combat_state = new_state
@@ -120,11 +120,12 @@ func _apply_combat_pose():
 			body_root.rotation.z = deg_to_rad(16.0 * sin(p * PI))
 
 func _apply_hit_pose():
-	var weight = hit_timer / (0.28 if hit_strength > 1.0 else 0.18)
+	var weight = hit_timer / (0.38 if hit_strength > 1.5 else 0.27)
 	var local_direction = get_parent().global_transform.basis.inverse() * hit_direction
-	body_root.rotation.x += local_direction.z * 0.20 * weight * hit_strength
-	body_root.rotation.z += -local_direction.x * 0.22 * weight * hit_strength
-	body_root.position += Vector3(-local_direction.x, 0.04, -local_direction.z) * 0.07 * weight * hit_strength
+	body_root.rotation.x += local_direction.z * 0.38 * weight * hit_strength
+	body_root.rotation.z += -local_direction.x * 0.42 * weight * hit_strength
+	body_root.rotation.y += -local_direction.x * 0.16 * weight * hit_strength
+	body_root.position += Vector3(local_direction.x, 0.06, local_direction.z) * 0.14 * weight * hit_strength
 
 func _limb(parent: Node, name: String, pos: Vector3, length: float, width: float, mat: Material, angle := Vector3.ZERO):
 	var part = VisualLibrary.tapered(Vector2(width * 0.78, width * 0.78), Vector2(width, width), length, mat, name)

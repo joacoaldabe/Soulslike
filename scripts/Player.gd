@@ -299,16 +299,16 @@ func _start_attack(kind: String):
 	is_attacking = true
 	is_rolling = false
 	var base_time = weapon.attack_time if weapon != null else 0.46
-	var total = base_time * (1.72 if kind == "heavy" else 1.18)
-	var windup_ratio = 0.48 if kind == "heavy" else 0.34
-	var active_ratio = 0.18 if kind == "heavy" else 0.20
+	var total = base_time * (2.00 if kind == "heavy" else 1.18)
+	var windup_ratio = 0.52 if kind == "heavy" else 0.34
+	var active_ratio = 0.16 if kind == "heavy" else 0.20
 	action.begin("attack", [
 		{"name":"windup", "duration":total * windup_ratio, "allow_rotation":true, "allow_movement":false, "hitbox_active":false, "can_chain":false, "invulnerable":false, "interruptible":true},
 		{"name":"active", "duration":total * active_ratio, "allow_rotation":false, "allow_movement":true, "hitbox_active":true, "can_chain":false, "invulnerable":false, "interruptible":kind != "heavy"},
 		{"name":"recovery", "duration":total * (1.0 - windup_ratio - active_ratio), "allow_rotation":false, "allow_movement":false, "hitbox_active":false, "can_chain":true, "invulnerable":false, "interruptible":true}
 	])
 	if visual_model != null:
-		visual_model.play_attack(kind, weapon.weapon_family if weapon != null else "sword", total)
+		visual_model.play_attack(kind, weapon.weapon_family if weapon != null else "sword", total, 0 if kind == "heavy" else (attack_sequence - 1) % 2)
 
 func _choose_attack_direction() -> Vector3:
 	if _has_lock_target():
@@ -379,7 +379,7 @@ func _apply_attack_hit() -> bool:
 	var reach = weapon.attack_reach if weapon != null else 1.6
 	var arc = deg_to_rad(weapon.attack_arc if weapon != null else 80.0)
 	var damage = GameState.calculate_weapon_damage(weapon, attack_type)
-	var poise_damage = damage * (0.72 if attack_type == "heavy" else 0.32)
+	var poise_damage = damage * (0.96 if attack_type == "heavy" else 0.32)
 	var impact_force = 5.2 if attack_type == "heavy" else 2.4
 	var connected := false
 	for enemy in get_tree().get_nodes_in_group("enemies"):

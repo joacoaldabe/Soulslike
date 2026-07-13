@@ -12,6 +12,68 @@ var equipment = {
 	"consumable": ""
 }
 
+func clear_all():
+	item_counts.clear()
+	for key in equipment.keys():
+		equipment[key] = ""
+	emit_signal("equipment_changed")
+	emit_signal("inventory_changed")
+
+func get_save_data() -> Dictionary:
+	return {
+		"item_counts": item_counts.duplicate(true),
+		"equipment": equipment.duplicate(true)
+	}
+
+func apply_save_data(data) -> bool:
+	if not data is Dictionary:
+		push_error("Inventory: los datos de guardado no son un diccionario.")
+		return false
+	if data.has("item_counts"):
+		if not data["item_counts"] is Dictionary:
+			push_warning("Inventory: item_counts invalido; se conserva el inventario predeterminado.")
+		else:
+			var loaded_counts := {}
+			for item_id in data["item_counts"].keys():
+				var item_key := str(item_id)
+				var raw_amount = data["item_counts"][item_id]
+				if not raw_amount is int and not raw_amount is float:
+					continue
+				var amount := int(raw_amount)
+				if Database.get_item(item_key) != null and amount > 0:
+					loaded_counts[item_key] = amount
+			item_counts = loaded_counts
+	if data.has("equipment"):
+		if not data["equipment"] is Dictionary:
+			push_warning("Inventory: equipment invalido; se conserva el equipo predeterminado.")
+		else:
+			var loaded_equipment: Dictionary = data["equipment"]
+			for slot in equipment.keys():
+				if not loaded_equipment.has(slot):
+					continue
+				if not loaded_equipment[slot] is String:
+					equipment[slot] = ""
+					continue
+				var item_id: String = loaded_equipment[slot]
+				equipment[slot] = item_id if _is_valid_equipment_for_slot(slot, item_id) else ""
+	emit_signal("equipment_changed")
+	emit_signal("inventory_changed")
+	return true
+
+func _is_valid_equipment_for_slot(slot: String, item_id: String) -> bool:
+	if item_id == "":
+		return true
+	if not has_item(item_id):
+		return false
+	var expected_type: String = {
+		"right_weapon": "weapon",
+		"armor": "armor",
+		"ring_1": "ring",
+		"ring_2": "ring",
+		"consumable": "consumable"
+	}.get(slot, "")
+	return Database.get_item_type(item_id) == expected_type
+
 func reset_to_class(class_data):
 	item_counts.clear()
 	for key in equipment.keys():

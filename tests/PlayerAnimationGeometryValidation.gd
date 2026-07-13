@@ -41,11 +41,26 @@ func _run():
 
 	for weapon in root.get_node("Database").list_weapons():
 		model.set_equipped_weapon(weapon)
+		var attack_sides := []
+		for variant in [0, 1]:
+			model.play_attack("light", weapon.weapon_family, 0.5, variant)
+			model.set_action_phase("attack", "active", 0.5)
+			model._pose_model()
+			attack_sides.append(model.right_hand.global_position.x)
+		_expect(sign(attack_sides[0]) != sign(attack_sides[1]) or abs(attack_sides[0] - attack_sides[1]) > 0.35, "%s alternates attack direction" % weapon.weapon_family)
+		model.play_attack("light", weapon.weapon_family, 0.5, 0)
 		for phase_data in [["windup",0.75],["active",0.1],["active",0.5],["active",0.9]]:
 			model.set_action_phase("attack",phase_data[0],phase_data[1])
 			model._pose_model()
 			var hand_z = model.right_hand.global_position.z
 			_expect(hand_z < 0.18, "%s attack %s %.2f keeps weapon hand in front (z=%.3f)" % [weapon.weapon_family,phase_data[0],phase_data[1],hand_z])
+		model.play_attack("heavy", weapon.weapon_family, 0.85, 0)
+		for phase_data in [["windup",0.75],["active",0.5],["recovery",0.5]]:
+			model.set_action_phase("attack", phase_data[0], phase_data[1])
+			model._pose_model()
+			var heavy_hand_z = model.right_hand.global_position.z
+			_expect(heavy_hand_z < 0.18, "%s heavy %s keeps weapon hand in front (z=%.3f)" % [weapon.weapon_family, phase_data[0], heavy_hand_z])
+			_expect(abs(model.left_thigh.rotation_degrees.x) < 22.0 and abs(model.right_thigh.rotation_degrees.x) < 22.0, "%s heavy %s keeps legs outside the torso" % [weapon.weapon_family, phase_data[0]])
 
 	model.set_action_phase("none","none",0.0)
 	model._pose_model()

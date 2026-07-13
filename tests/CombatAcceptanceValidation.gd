@@ -173,10 +173,12 @@ func _run():
 	_expect(player.current_attack_id > first_sequence and player.action_kind == "attack", "8 late-recovery input chains consecutive light attacks")
 	await _wait_for_action(player)
 	await _reset_player()
+	var stamina_before_heavy = game_state.stamina
 	player._start_attack("heavy")
 	var heavy_duration = player.action.get_total_duration()
-	_expect(player.attack_type == "heavy" and heavy_duration > light_duration * 1.35, "9 heavy attack has a longer exposed action")
-	_expect(player.action.get_phase_duration() > light_duration * 0.40, "9 heavy wind-up is visibly longer")
+	_expect(player.attack_type == "heavy" and heavy_duration >= light_duration * 1.65, "9 heavy attack is roughly 70 percent slower")
+	_expect(player.action.get_phase_duration() > light_duration * 0.60, "9 heavy wind-up is visibly longer")
+	_expect(game_state.stamina == stamina_before_heavy - root.get_node("Inventory").get_equipped_weapon().heavy_stamina_cost, "9 heavy attack spends the equipped weapon heavy stamina cost")
 	await _wait_for_action(player)
 
 	# 10-12: six-phase directional roll behavior.
@@ -251,7 +253,7 @@ func _run():
 	await _wait_for_phase(player, "active")
 	await physics_frame
 	var heavy_damage = hollow_health - hollow.health
-	_expect(heavy_damage > light_damage, "17 heavy attack damages a Hollow more than light")
+	_expect(heavy_damage >= light_damage * 1.65, "17 heavy attack damages a Hollow by roughly 1.7x light")
 	await _wait_for_action(player)
 	if is_instance_valid(hollow):
 		hollow.global_position = Vector3(12, 0, -10)
@@ -263,6 +265,7 @@ func _run():
 	_expect(brute.state != "stagger" and brute.poise < brute_start_poise, "18 heavy guard resists several heavy poise hits")
 	brute.receive_hit(_next_hit(player, 1, 30.0, Vector3.FORWARD, "heavy"))
 	_expect(brute.state == "stagger", "18 repeated heavy hits eventually stagger the guard")
+	_expect(brute.action.get_phase_duration() >= 0.70, "18 heavy poise break produces a longer stagger")
 
 	# 19: each archetype can be intentionally rolled through on its own timing.
 	for enemy_id in ["hollow_sword", "axe_brute", "spear_guard", "ash_hound"]:

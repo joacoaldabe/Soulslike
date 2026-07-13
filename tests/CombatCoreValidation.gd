@@ -132,14 +132,20 @@ func _run():
 
 	var poise_hollow = _spawn_enemy("hollow_sword", Vector3(8,0,-8))
 	var light_hit = CombatHit.new(player,0,12,Vector3.FORWARD,poise_hollow.global_position,1,"light",201)
-	var heavy_hit = CombatHit.new(player,0,30,Vector3.FORWARD,poise_hollow.global_position,4,"heavy",202)
+	var heavy_hit = CombatHit.new(player,0,36,Vector3.FORWARD,poise_hollow.global_position,4,"heavy",202)
 	var poise_start = poise_hollow.poise
 	poise_hollow.receive_hit(light_hit)
 	var light_loss = poise_start - poise_hollow.poise
 	var poise_after_light = poise_hollow.poise
 	poise_hollow.receive_hit(heavy_hit)
 	var heavy_loss = poise_after_light - poise_hollow.poise
-	_expect(heavy_loss > light_loss, "heavy attack deals more poise damage")
+	_expect(heavy_hit.poise_damage >= light_hit.poise_damage * 3.0, "heavy attack carries three times the light poise value")
+	_expect(heavy_loss > light_loss, "heavy attack visibly removes more enemy poise")
+	for weapon in database.list_weapons():
+		var weapon_light_damage = game_state.calculate_weapon_damage(weapon, "light")
+		var weapon_heavy_damage = game_state.calculate_weapon_damage(weapon, "heavy")
+		_expect(weapon_heavy_damage >= weapon_light_damage * 1.65 and weapon_heavy_damage <= weapon_light_damage * 1.75, "%s heavy damage is 1.7x light damage" % weapon.display_name)
+		_expect(weapon.heavy_stamina_cost > weapon.light_stamina_cost, "%s keeps its higher heavy stamina cost" % weapon.display_name)
 	var heavy_guard = _spawn_enemy("axe_brute", Vector3(9,0,-9))
 	_expect(heavy_guard.max_poise > poise_hollow.max_poise * 2.0, "heavy guard has substantially more poise")
 
@@ -162,6 +168,22 @@ func _run():
 	lock_death_enemy.receive_hit(CombatHit.new(player,9999,999,Vector3.FORWARD,lock_death_enemy.global_position,9,"heavy",501))
 	player._validate_lock_target()
 	_expect(player.lock_target == null, "lock-on releases immediately when target dies")
+
+	var ash_victim = _spawn_enemy("hollow_sword", Vector3(4,0,-4))
+	ash_victim.receive_hit(CombatHit.new(player,9999,999,Vector3.FORWARD,ash_victim.global_position,9,"heavy",601))
+	_expect(ash_victim.is_dead and ash_victim.collision_layer == 0 and ash_victim.collision_mask == 0, "dead enemy keeps a non-colliding corpse")
+	_expect(ash_victim.ash_particles != null and not ash_victim.ash_particles.emitting, "ash particles wait for the corpse to settle")
+	ash_victim._process(ash_victim.ASH_DISSOLVE_DELAY + 0.5)
+	_expect(ash_victim.ash_particles.emitting and ash_victim.dissolve_meshes[0].transparency > 0.0, "corpse dissolves while gray ash rises")
+	var ash_process = ash_victim.ash_particles.process_material
+	_expect(ash_process.emission_shape == ParticleProcessMaterial.EMISSION_SHAPE_BOX and ash_process.emission_box_extents.z >= 1.0, "ash emits across the full fallen body")
+	_expect(ash_victim.ash_particles.draw_pass_1 is BoxMesh and ash_victim.ash_particles.draw_pass_1.size.x <= 0.04, "ash uses small irregular fragments instead of spheres")
+	_expect(ash_victim.visual_model.scale.is_equal_approx(Vector3.ONE), "ash dissolution keeps the corpse scale unchanged")
+	var lingering_ash = ash_victim.ash_particles
+	ash_victim.death_elapsed = ash_victim.ASH_DISSOLVE_DURATION - 0.01
+	ash_victim._process(0.02)
+	_expect(ash_victim.is_queued_for_deletion(), "enemy is removed after the ten second ash cycle")
+	_expect(is_instance_valid(lingering_ash) and not lingering_ash.emitting and lingering_ash.get_parent() == world, "existing ash lingers after new emission stops")
 
 	if failures.is_empty():
 		print("COMBAT_CORE_OK")

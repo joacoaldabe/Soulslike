@@ -1,6 +1,8 @@
 extends CharacterBody3D
 
 const GRAVITY = 24.0
+const ASH_DISSOLVE_DURATION := 10.0
+const ASH_DISSOLVE_DELAY := 1.20
 
 @export var enemy_id = "hollow_sword"
 @export var combat_debug := false
@@ -24,6 +26,9 @@ var poise := 1.0
 var poise_recovery_timer := 0.0
 var stagger_immunity_timer := 0.0
 var received_attack_ids := {}
+var death_elapsed := 0.0
+var ash_particles: GPUParticles3D = null
+var dissolve_meshes: Array[MeshInstance3D] = []
 
 func _ready():
 	add_to_group("enemies")
@@ -89,6 +94,22 @@ func _physics_process(delta):
 	move_and_slide()
 	_update_visual_state()
 	_update_debug_label()
+
+func _process(delta):
+	if not is_dead:
+		return
+	death_elapsed += delta
+	if death_elapsed < ASH_DISSOLVE_DELAY:
+		return
+	var dissolve_progress = clamp((death_elapsed - ASH_DISSOLVE_DELAY) / (ASH_DISSOLVE_DURATION - ASH_DISSOLVE_DELAY), 0.0, 1.0)
+	if ash_particles != null:
+		ash_particles.emitting = true
+	for mesh in dissolve_meshes:
+		if is_instance_valid(mesh):
+			mesh.transparency = dissolve_progress
+	if death_elapsed >= ASH_DISSOLVE_DURATION:
+		_release_ash_particles()
+		queue_free()
 
 func _update_ai(delta: float, player):
 	var offset = player.global_position - global_position
@@ -212,7 +233,7 @@ func receive_hit(hit: CombatHit) -> int:
 	if health <= 0:
 		_die()
 	elif staggered:
-		_start_stagger()
+		_start_stagger(hit.impact_type == "heavy")
 	return hit.damage
 
 func take_damage(amount, source):
@@ -220,13 +241,13 @@ func take_damage(amount, source):
 	direction.y = 0.0
 	return receive_hit(CombatHit.new(source, int(amount), float(amount) * 0.3, direction, global_position + Vector3.UP, 2.0, "light", int(Time.get_ticks_usec())))
 
-func _start_stagger():
+func _start_stagger(from_heavy := false):
 	action.cancel()
 	state = "stagger"
 	attack_has_hit = true
 	poise = max_poise * 0.30
-	stagger_immunity_timer = 0.65
-	action.begin("stagger", [{"name":"stagger", "duration":0.46, "interruptible":false}])
+	stagger_immunity_timer = 0.90 if from_heavy else 0.65
+	action.begin("stagger", [{"name":"stagger", "duration":0.70 if from_heavy else 0.46, "interruptible":false}])
 
 func _update_poise(delta: float):
 	if poise_recovery_timer > 0.0:
@@ -272,9 +293,13 @@ func _die():
 	set_physics_process(false)
 	collision_layer = 0
 	collision_mask = 0
+	if debug_label != null:
+		debug_label.visible = false
 	if visual_model != null:
 		visual_model.set_targeted(false)
 		visual_model.play_death()
+		_prepare_dissolve_materials()
+		_create_ash_particles()
 	GameState.add_souls(data.souls_reward)
 	for index in range(data.drop_ids.size()):
 		var chance = float(data.drop_chances[index]) if index < data.drop_chances.size() else 0.0
@@ -284,6 +309,65 @@ func _die():
 			var item = Database.get_item(item_id)
 			if item != null:
 				get_tree().call_group("ui", "notify", "Obtuviste %s." % item.display_name)
+
+func _prepare_dissolve_materials():
+	dissolve_meshes.clear()
+	for mesh in visual_model.find_children("*", "MeshInstance3D", true, false):
+		if mesh.mesh == null:
+			continue
+		for surface in mesh.mesh.get_surface_count():
+			var source_material = mesh.get_active_material(surface)
+			if source_material == null:
+				continue
+			var fade_material = source_material.duplicate()
+			if fade_material is BaseMaterial3D:
+				fade_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mesh.set_surface_override_material(surface, fade_material)
+		dissolve_meshes.append(mesh)
+
+func _create_ash_particles():
+	ash_particles = GPUParticles3D.new()
+	ash_particles.name = "AshDissolve"
+	ash_particles.emitting = false
+	ash_particles.amount = 210
+	ash_particles.lifetime = 3.6
+	ash_particles.visibility_aabb = AABB(Vector3(-1.8, 0.0, -1.8), Vector3(3.6, 4.4, 3.6))
+	var process = ParticleProcessMaterial.new()
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = Vector3(0.48, 0.28, 1.05)
+	process.direction = Vector3(0.22, 1.0, 0.08).normalized()
+	process.spread = 36.0
+	process.initial_velocity_min = 0.65
+	process.initial_velocity_max = 1.35
+	process.gravity = Vector3(0.16, 0.28, 0.06)
+	process.angular_velocity_min = -150.0
+	process.angular_velocity_max = 150.0
+	process.scale_min = 0.55
+	process.scale_max = 1.15
+	ash_particles.process_material = process
+	var ash_mesh = BoxMesh.new()
+	ash_mesh.size = Vector3(0.032, 0.009, 0.018)
+	var ash_material = StandardMaterial3D.new()
+	ash_material.albedo_color = Color(0.56, 0.59, 0.61, 0.86)
+	ash_material.roughness = 1.0
+	ash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ash_mesh.material = ash_material
+	ash_particles.draw_pass_1 = ash_mesh
+	ash_particles.position = Vector3(0.0, 0.34, 1.02)
+	add_child(ash_particles)
+
+func _release_ash_particles():
+	if ash_particles == null or not is_instance_valid(ash_particles):
+		return
+	var lingering_particles = ash_particles
+	ash_particles = null
+	lingering_particles.emitting = false
+	lingering_particles.reparent(get_parent(), true)
+	get_tree().create_timer(lingering_particles.lifetime).timeout.connect(func():
+		if is_instance_valid(lingering_particles):
+			lingering_particles.queue_free()
+	)
 
 func get_combat_debug_state() -> Dictionary:
 	return {

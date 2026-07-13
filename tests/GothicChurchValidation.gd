@@ -33,6 +33,9 @@ func _run():
 		_expect(not chest["loot"].is_empty(), "%s has explicit loot" % chest["id"])
 	for spawn in level.enemy_spawns:
 		_expect(database.get_enemy(spawn["enemy_id"]) != null, "enemy id %s exists" % spawn["enemy_id"])
+		for bonfire in database.list_bonfires():
+			var enemy_position: Vector3 = spawn["position"]
+			_expect(enemy_position.distance_to(bonfire.position) >= 7.0, "enemy %s stays clear of bonfire %s" % [spawn["enemy_id"],bonfire.bonfire_id])
 	if failures.is_empty():
 		print("GOTHIC_CHURCH_VALIDATION_OK")
 		quit(0)

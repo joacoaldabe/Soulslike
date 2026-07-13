@@ -32,6 +32,7 @@ var roll_duration = DEFAULT_ROLL_DURATION
 var attack_active = false
 var attack_kind = "light"
 var attack_family = "sword"
+var attack_variant := 0
 var attack_timer = 0.0
 var attack_duration = 0.1
 var hit_timer = 0.0
@@ -77,17 +78,18 @@ func set_attack_state(active, kind, timer, duration):
 	attack_timer = max(0.0, timer)
 	attack_duration = max(0.01, duration)
 
-func play_attack(kind, weapon_family, duration):
+func play_attack(kind, weapon_family, duration, variant := 0):
 	attack_kind = kind
 	attack_family = weapon_family
+	attack_variant = int(variant) % 2
 	attack_duration = max(0.01, duration)
 	attack_timer = attack_duration
 	attack_active = true
 
 func play_hit(direction: Vector3 = Vector3.FORWARD, severity: String = "light"):
 	hit_direction = direction
-	hit_strength = 1.55 if severity == "stagger" or severity == "heavy" else 1.0
-	hit_timer = 0.30 if hit_strength > 1.0 else 0.20
+	hit_strength = 1.95 if severity == "stagger" or severity == "heavy" else 1.35
+	hit_timer = 0.38 if hit_strength > 1.5 else 0.27
 
 func play_death():
 	death_pose = true
@@ -464,6 +466,9 @@ func _get_lowest_body_y() -> float:
 
 func _pose_attack():
 	var p = action_progress if action_kind == "attack" else clamp(1.0 - attack_timer / attack_duration, 0.0, 1.0)
+	if attack_kind == "heavy":
+		_pose_heavy_attack(p)
+		return
 	var progress := 0.0
 	match action_phase:
 		"windup": progress = 0.30 * (p * p * (3.0 - 2.0 * p))
@@ -518,6 +523,13 @@ func _pose_attack():
 	right_hand.rotation.z = -0.25 * impact
 	left_thigh.rotation.x = -0.12 * impact
 	right_thigh.rotation.x = 0.12 * impact
+	if attack_variant == 1:
+		hips.rotation.y *= -1.0
+		chest.rotation.y *= -1.0
+		head.rotation.y *= -1.0
+		right_shoulder.rotation.z *= -1.0
+		right_forearm.rotation.z *= -1.0
+		right_hand.rotation.z *= -1.0
 	if action_phase == "recovery" and attack_family != "sword":
 		chest.rotation *= recovery_weight
 		right_shoulder.rotation *= recovery_weight
@@ -525,16 +537,70 @@ func _pose_attack():
 		left_shoulder.rotation *= recovery_weight
 		left_forearm.rotation *= recovery_weight
 
+func _pose_heavy_attack(p: float):
+	var timeline := p
+	match action_phase:
+		"windup": timeline = 0.56 * (p * p * (3.0 - 2.0 * p))
+		"active": timeline = 0.56 + 0.26 * (1.0 - pow(1.0 - p, 3.0))
+		"recovery": timeline = 0.82 + 0.18 * (p * p * (3.0 - 2.0 * p))
+	var load = clamp(timeline / 0.56, 0.0, 1.0)
+	var strike = clamp((timeline - 0.56) / 0.26, 0.0, 1.0)
+	var recover = clamp((timeline - 0.82) / 0.18, 0.0, 1.0)
+	var settle = 1.0 - recover
+	var knee_bend = 0.16 * sin(timeline * PI)
+	left_thigh.rotation.x = 0.13 * load - 0.09 * strike
+	right_thigh.rotation.x = -0.13 * load + 0.09 * strike
+	left_shin.rotation.x = -knee_bend
+	right_shin.rotation.x = -knee_bend
+	hips.rotation.y = lerp(-0.12, 0.14, strike) * settle
+	spine.rotation.x = -0.12 * load + 0.16 * strike
+	head.rotation.y = -hips.rotation.y * 0.45
+	match attack_family:
+		"axe":
+			chest.rotation.y = lerp(-0.30, 0.10, strike) * settle
+			chest.rotation.x = lerp(-0.08, 0.24, strike) * settle
+			right_shoulder.rotation_degrees = Vector3(lerp(18.0, 116.0, load), 0.0, lerp(50.0, -4.0, strike))
+			right_forearm.rotation_degrees = Vector3(lerp(-30.0, 24.0, load), 0.0, lerp(-16.0, 10.0, strike))
+			left_shoulder.rotation_degrees = Vector3(lerp(-22.0, 58.0, load), 0.0, -36.0)
+			left_forearm.rotation_degrees = Vector3(lerp(-12.0, -42.0, load), 0.0, 0.0)
+		"spear":
+			chest.rotation.y = lerp(-0.10, 0.06, strike) * settle
+			chest.rotation.x = lerp(0.10, -0.16, strike) * settle
+			right_shoulder.position.z = lerp(0.16, -0.32, strike) * settle
+			right_shoulder.rotation_degrees = Vector3(lerp(34.0, 82.0, load), 0.0, 12.0)
+			right_forearm.rotation_degrees = Vector3(lerp(-36.0, -4.0, strike), 0.0, 0.0)
+			left_shoulder.rotation_degrees = Vector3(lerp(-30.0, -70.0, load), 0.0, -20.0)
+			left_forearm.rotation_degrees = Vector3(lerp(-26.0, -8.0, strike), 0.0, 0.0)
+		"mace":
+			chest.rotation.y = lerp(0.26, -0.08, strike) * settle
+			chest.rotation.x = lerp(-0.10, 0.28, strike) * settle
+			right_shoulder.rotation_degrees = Vector3(lerp(22.0, 122.0, load), 0.0, lerp(-42.0, 6.0, strike))
+			right_forearm.rotation_degrees = Vector3(lerp(-26.0, 30.0, load), 0.0, lerp(18.0, 4.0, strike))
+			left_shoulder.rotation_degrees = Vector3(lerp(-18.0, 54.0, load), 0.0, -32.0)
+			left_forearm.rotation_degrees = Vector3(lerp(-10.0, -38.0, load), 0.0, 0.0)
+		_:
+			chest.rotation.y = lerp(-0.20, 0.06, strike) * settle
+			chest.rotation.x = lerp(-0.10, 0.22, strike) * settle
+			right_shoulder.rotation_degrees = Vector3(lerp(26.0, 112.0, load), 0.0, lerp(42.0, 0.0, strike))
+			right_forearm.rotation_degrees = Vector3(lerp(-26.0, 20.0, load), 0.0, lerp(-12.0, 6.0, strike))
+			left_shoulder.rotation_degrees = Vector3(lerp(-18.0, 50.0, load), 0.0, -34.0)
+			left_forearm.rotation_degrees = Vector3(lerp(-10.0, -36.0, load), 0.0, 0.0)
+	right_hand.rotation.z = -0.12 * sin(timeline * PI)
+
 func _pose_hit():
-	var duration = 0.30 if hit_strength > 1.0 else 0.20
+	var duration = 0.38 if hit_strength > 1.5 else 0.27
 	var strength = clamp(hit_timer / duration, 0.0, 1.0) * hit_strength
 	var local_direction = global_transform.basis.inverse() * hit_direction
-	chest.rotation.x += local_direction.z * 0.32 * strength
-	chest.rotation.z += -local_direction.x * 0.28 * strength
-	head.rotation.x += local_direction.z * 0.18 * strength
-	head.rotation.z += -local_direction.x * 0.16 * strength
-	left_shoulder.rotation.x += 0.30 * strength
-	right_shoulder.rotation.x += 0.30 * strength
+	rig_root.position += Vector3(local_direction.x, 0.03, local_direction.z) * 0.11 * strength
+	hips.rotation.y += -local_direction.x * 0.18 * strength
+	chest.rotation.x += local_direction.z * 0.48 * strength
+	chest.rotation.z += -local_direction.x * 0.44 * strength
+	head.rotation.x += local_direction.z * 0.30 * strength
+	head.rotation.z += -local_direction.x * 0.26 * strength
+	left_shoulder.rotation.x += 0.46 * strength
+	right_shoulder.rotation.x += 0.52 * strength
+	left_forearm.rotation.x += 0.22 * strength
+	right_forearm.rotation.x += 0.28 * strength
 
 func _pose_stagger():
 	var p = action_progress

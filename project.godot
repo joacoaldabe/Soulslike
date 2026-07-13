@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="SoulsLike Prototype"
-run/main_scene="res://scenes/Main.tscn"
+run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.7")
 
 [autoload]
@@ -23,6 +23,8 @@ config/features=PackedStringArray("4.7")
 Database="*res://scripts/autoload/Database.gd"
 Inventory="*res://scripts/autoload/Inventory.gd"
 GameState="*res://scripts/autoload/GameState.gd"
+SaveManager="*res://scripts/autoload/SaveManager.gd"
+GameSession="*res://scripts/autoload/GameSession.gd"
 
 [dotnet]
 

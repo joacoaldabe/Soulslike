@@ -17,8 +17,8 @@ var enemy_spawns := [
 	{"enemy_id":"ash_hound", "position":Vector3(24,0,-107)},
 	{"enemy_id":"hollow_sword", "position":Vector3(39,0,-121)},
 	{"enemy_id":"spear_guard", "position":Vector3(28,0,-131)},
-	{"enemy_id":"hollow_sword", "position":Vector3(4,0,-143)},
-	{"enemy_id":"ash_hound", "position":Vector3(-5,0,-151)},
+	{"enemy_id":"hollow_sword", "position":Vector3(8,0,-150)},
+	{"enemy_id":"ash_hound", "position":Vector3(-7,0,-159)},
 	{"enemy_id":"axe_brute", "position":Vector3(5,0,-162)},
 	{"enemy_id":"spear_guard", "position":Vector3(-7,0,-180)},
 	{"enemy_id":"hollow_sword", "position":Vector3(7,0,-189)},
@@ -101,6 +101,10 @@ func _side_walls(center: Vector3, size: Vector2, side: String, gap: float, h: fl
 	else:
 		_wall(center+offset+Vector3(0,0,-(gap+segment)*0.5),Vector3(t,h,segment))
 		_wall(center+offset+Vector3(0,0,(gap+segment)*0.5),Vector3(t,h,segment))
+	var doorway_height := 4.2
+	var upper_height := h - doorway_height
+	var upper_offset = Vector3(0, doorway_height + upper_height * 0.5, (-size.y if side=="north" else size.y)*0.5) if horizontal else Vector3((-size.x if side=="west" else size.x)*0.5, doorway_height + upper_height * 0.5, 0)
+	_wall(center+upper_offset,Vector3(gap,upper_height,t) if horizontal else Vector3(t,upper_height,gap))
 
 func _build_atrium() -> void:
 	_floor_room("Atrium",Vector3(0,0,-14),Vector2(28,28))
@@ -120,9 +124,21 @@ func _build_nave() -> void:
 func _build_transepts() -> void:
 	_floor_room("Transepts",Vector3(0,0,-92),Vector2(60,24))
 	_room_walls(Vector3(0,0,-92),Vector2(60,24),{"south":9.0,"north":8.0,"east":7.0})
-	for x in [-24,-16,16,24]: _column(Vector3(x,0,-92),5.5,false)
+	_wall(Vector3(0,7.25,-92),Vector3(60,0.5,24),"stone_dark")
+	for x in [-24.0,-16.0,-8.0,0.0,8.0,16.0,24.0]:
+		_wall(Vector3(x,6.85,-92),Vector3(0.45,0.45,23.0),"dark_metal")
+	# The broad third zone needs transverse paving and architecture so it reads as a room, not a missing section.
+	for z in range(-101,-82,4):
+		var joint = VisualLibrary.box(Vector3(58.0,0.018,0.055),VisualLibrary.material("stone_dark"),"TranseptPavingJoint")
+		VisualLibrary.add_part(self,joint,Vector3(0,0.012,z))
+	for x in [-24,-16,-8,8,16,24]:
+		_column(Vector3(x,0,-86),5.5,false)
+		_column(Vector3(x,0,-98),5.5,false)
+	for x in [-19.0,-11.0,11.0,19.0]:
+		_bench(Vector3(x,0,-92))
 	_statue(Vector3(-24,0,-98),0.0); _statue(Vector3(24,0,-98),0.0)
 	_small_altar(Vector3(-25,0,-84)); _small_altar(Vector3(25,0,-84))
+	for p in [Vector3(-27,0,-91),Vector3(27,0,-95),Vector3(-13,0,-101),Vector3(13,0,-83)]: _rubble(p)
 
 func _build_cloister_and_library() -> void:
 	_floor_room("Cloister",Vector3(32,0,-119),Vector2(32,32))
@@ -156,6 +172,12 @@ func _build_sanctuary() -> void:
 
 func _build_connectors() -> void:
 	_corridor("AtriumToNave",Vector3(0,0,-29),Vector2(8,4))
+	_floor_room("NaveToTransept",Vector3(0,0,-85),Vector2(9,10))
+	_wall(Vector3(-4.5,3.0,-85),Vector3(0.7,6.0,10.0))
+	_wall(Vector3(4.5,3.0,-85),Vector3(0.7,6.0,10.0))
+	_floor_room("TranseptToCrypt",Vector3(0,0,-118),Vector2(8,28))
+	_wall(Vector3(-4.0,3.0,-118),Vector3(0.7,6.0,28.0))
+	_wall(Vector3(4.0,3.0,-118),Vector3(0.7,6.0,28.0))
 	_corridor("TranseptToCloister",Vector3(31,0,-102),Vector2(7,8))
 	_corridor("CloisterToCrypt",Vector3(16,0,-135),Vector2(32,7))
 	_corridor("CryptToHall",Vector3(0,-0.4,-170),Vector2(8,8))
