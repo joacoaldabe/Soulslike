@@ -8,4 +8,5 @@ item_id = "hunter_set"
 display_name = "Hunter Attire"
 description = "Cuero y capa corta preparados para largas cacerias."
 defense = 8
+poise = 8.0
 weight = 1.2

@@ -8,4 +8,5 @@ item_id = "cloth_set"
 display_name = "Cloth Set"
 description = "Ropa liviana con poca defensa."
 defense = 4
+poise = 2.0
 weight = 0.8

@@ -8,4 +8,5 @@ item_id = "sorcerer_set"
 display_name = "Sorcerer Robes"
 description = "Tunica ceremonial de estudios arcanos."
 defense = 4
+poise = 1.0
 weight = 0.7

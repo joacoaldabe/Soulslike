@@ -30,7 +30,28 @@ var stamina_bar = null
 var souls_label = null
 var weapon_label = null
 var inventory_panel = null
-var inventory_lists = {}
+var inventory_window = null
+var inventory_root = null
+var inventory_header = null
+var inventory_columns = null
+var inventory_view = null
+var inventory_settings_view = null
+var inventory_slot_buttons: Dictionary = {}
+var inventory_slot_visuals: Dictionary = {}
+var inventory_candidate_list = null
+var inventory_detail_icon = null
+var inventory_detail_name = null
+var inventory_detail_description = null
+var inventory_detail_stats = null
+var inventory_action_button = null
+var inventory_hover_name = null
+var inventory_stats_box = null
+var inventory_tab_button = null
+var settings_tab_button = null
+var inventory_settings_controls = null
+var selected_inventory_slot := "right_weapon"
+var selected_inventory_instance := ""
+var inventory_exit_in_progress := false
 var bonfire_panel = null
 var bonfire_menu_id := ""
 var travel_option = null
@@ -64,6 +85,7 @@ func _ready():
 	_refresh_hud()
 	_refresh_inventory()
 	get_viewport().size_changed.connect(_update_creator_layout)
+	get_viewport().size_changed.connect(_update_inventory_layout)
 
 func _apply_visual_theme():
 	var theme = Theme.new()
@@ -318,38 +340,216 @@ func _build_hud():
 	hud.hide()
 
 func _build_inventory():
-	inventory_panel = PanelContainer.new()
-	inventory_panel.theme = visual_theme
-	inventory_panel.set_anchors_preset(Control.PRESET_CENTER)
-	inventory_panel.custom_minimum_size = Vector2(620, 440)
+	inventory_panel = Control.new()
+	inventory_panel.name = "InventoryOverlay"
+	inventory_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(inventory_panel)
-	var root = VBoxContainer.new()
-	root.add_theme_constant_override("separation", 8)
-	inventory_panel.add_child(root)
-	var title = Label.new()
-	title.text = "Inventario"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(title)
-	var columns = HBoxContainer.new()
-	columns.add_theme_constant_override("separation", 8)
-	root.add_child(columns)
-	for item_type in ["weapon", "armor", "ring", "consumable"]:
-		var column = VBoxContainer.new()
-		column.custom_minimum_size = Vector2(145, 280)
-		columns.add_child(column)
-		var label = Label.new()
-		label.text = item_type.capitalize()
-		column.add_child(label)
-		var list = ItemList.new()
-		list.custom_minimum_size = Vector2(145, 240)
-		column.add_child(list)
-		inventory_lists[item_type] = list
-		list.item_activated.connect(func(index): _activate_inventory_item(item_type, index))
-	var close_button = Button.new()
-	close_button.text = "Cerrar"
-	close_button.pressed.connect(close_inventory)
-	root.add_child(close_button)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	inventory_panel.add_child(center)
+	inventory_window = PanelContainer.new()
+	inventory_window.name = "InventoryWindow"
+	inventory_window.theme = visual_theme
+	center.add_child(inventory_window)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	inventory_window.add_child(scroll)
+	inventory_root = VBoxContainer.new()
+	inventory_root.add_theme_constant_override("separation", 10)
+	scroll.add_child(inventory_root)
+	inventory_header = BoxContainer.new()
+	inventory_header.add_theme_constant_override("separation", 8)
+	inventory_root.add_child(inventory_header)
+	var title := Label.new()
+	title.text = "EQUIPO E INVENTARIO"
+	title.add_theme_font_size_override("font_size", 29)
+	title.add_theme_color_override("font_color", Color("ddd5c2"))
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_header.add_child(title)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 8)
+	inventory_header.add_child(tabs)
+	inventory_tab_button = Button.new()
+	inventory_tab_button.text = "Inventario"
+	inventory_tab_button.toggle_mode = true
+	inventory_tab_button.custom_minimum_size.x = 132
+	inventory_tab_button.button_pressed = true
+	inventory_tab_button.pressed.connect(_show_inventory_tab)
+	tabs.add_child(inventory_tab_button)
+	settings_tab_button = Button.new()
+	settings_tab_button.text = "Configuracion"
+	settings_tab_button.toggle_mode = true
+	settings_tab_button.custom_minimum_size.x = 150
+	settings_tab_button.pressed.connect(_show_inventory_settings_tab)
+	tabs.add_child(settings_tab_button)
+	inventory_root.add_child(HSeparator.new())
+	inventory_view = VBoxContainer.new()
+	inventory_root.add_child(inventory_view)
+	inventory_columns = BoxContainer.new()
+	inventory_columns.add_theme_constant_override("separation", 16)
+	inventory_view.add_child(inventory_columns)
+	_build_inventory_equipment_column()
+	_build_inventory_items_column()
+	_build_inventory_stats_column()
+	inventory_settings_view = VBoxContainer.new()
+	inventory_settings_view.add_theme_constant_override("separation", 12)
+	inventory_root.add_child(inventory_settings_view)
+	var settings_title := Label.new()
+	settings_title.text = "CONFIGURACION"
+	settings_title.add_theme_font_size_override("font_size", 21)
+	inventory_settings_view.add_child(settings_title)
+	inventory_settings_controls = SettingsPanel.new()
+	inventory_settings_controls.show_exit_to_menu = true
+	inventory_settings_controls.exit_to_menu_requested.connect(_exit_to_main_menu)
+	inventory_settings_view.add_child(inventory_settings_controls)
+	inventory_settings_view.hide()
+	inventory_hover_name = Label.new()
+	inventory_hover_name.name = "HoveredItemName"
+	inventory_hover_name.text = ""
+	inventory_hover_name.add_theme_color_override("font_color", Color("d6bb78"))
+	inventory_hover_name.custom_minimum_size.y = 28
+	inventory_root.add_child(inventory_hover_name)
 	inventory_panel.hide()
+	_update_inventory_layout()
+
+func _build_inventory_equipment_column():
+	var column := VBoxContainer.new()
+	column.name = "EquipmentSlots"
+	column.add_theme_constant_override("separation", 10)
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_columns.add_child(column)
+	_add_inventory_heading(column, "EQUIPO")
+	var slot_data := [
+		["right_weapon", "Arma derecha"], ["armor", "Armadura"],
+		["ring_1", "Anillo 1"], ["ring_2", "Anillo 2"], ["consumable", "Objeto util"]
+	]
+	for data in slot_data:
+		var slot: String = data[0]
+		var button := Button.new()
+		button.name = "Slot_%s" % slot
+		button.text = ""
+		button.custom_minimum_size.y = 96
+		button.pressed.connect(_select_inventory_slot.bind(slot))
+		button.mouse_entered.connect(_show_slot_hover.bind(slot))
+		button.mouse_exited.connect(_clear_inventory_hover)
+		column.add_child(button)
+		var content := HBoxContainer.new()
+		content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 10)
+		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_theme_constant_override("separation", 14)
+		button.add_child(content)
+		var icon_frame := _create_item_icon_frame(Vector2(78, 78))
+		content.add_child(icon_frame)
+		var icon: TextureRect = icon_frame.get_child(0)
+		var text_box := VBoxContainer.new()
+		text_box.alignment = BoxContainer.ALIGNMENT_CENTER
+		text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_child(text_box)
+		var slot_label := Label.new()
+		slot_label.text = data[1]
+		slot_label.add_theme_font_size_override("font_size", 16)
+		slot_label.add_theme_color_override("font_color", Color("aaa391"))
+		slot_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		text_box.add_child(slot_label)
+		var item_label := Label.new()
+		item_label.text = "Vacio"
+		item_label.add_theme_font_size_override("font_size", 20)
+		item_label.add_theme_color_override("font_color", Color("e4dfd2"))
+		item_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		item_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		text_box.add_child(item_label)
+		inventory_slot_buttons[slot] = button
+		inventory_slot_visuals[slot] = {"frame": icon_frame, "icon": icon, "slot_label": slot_label, "item_label": item_label}
+
+func _build_inventory_items_column():
+	var column := VBoxContainer.new()
+	column.name = "ItemSelection"
+	column.add_theme_constant_override("separation", 8)
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_columns.add_child(column)
+	_add_inventory_heading(column, "OBJETOS DISPONIBLES")
+	inventory_candidate_list = ItemList.new()
+	inventory_candidate_list.name = "InstanceList"
+	inventory_candidate_list.fixed_icon_size = Vector2i(64, 64)
+	inventory_candidate_list.icon_mode = ItemList.ICON_MODE_LEFT
+	inventory_candidate_list.add_theme_font_size_override("font_size", 18)
+	inventory_candidate_list.add_theme_constant_override("h_separation", 12)
+	inventory_candidate_list.add_theme_constant_override("v_separation", 6)
+	inventory_candidate_list.custom_minimum_size = Vector2(370, 250)
+	inventory_candidate_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_candidate_list.item_selected.connect(_select_inventory_instance)
+	inventory_candidate_list.gui_input.connect(_on_inventory_list_input)
+	column.add_child(inventory_candidate_list)
+	var details := HBoxContainer.new()
+	details.add_theme_constant_override("separation", 10)
+	column.add_child(details)
+	var detail_icon_frame := _create_item_icon_frame(Vector2(112, 112))
+	details.add_child(detail_icon_frame)
+	inventory_detail_icon = detail_icon_frame.get_child(0)
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	details.add_child(text_box)
+	inventory_detail_name = Label.new()
+	inventory_detail_name.add_theme_font_size_override("font_size", 22)
+	inventory_detail_name.add_theme_color_override("font_color", Color("e4c77d"))
+	text_box.add_child(inventory_detail_name)
+	inventory_detail_description = Label.new()
+	inventory_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inventory_detail_description.add_theme_font_size_override("font_size", 18)
+	text_box.add_child(inventory_detail_description)
+	inventory_detail_stats = Label.new()
+	inventory_detail_stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inventory_detail_stats.add_theme_font_size_override("font_size", 17)
+	inventory_detail_stats.add_theme_color_override("font_color", Color("aaa391"))
+	text_box.add_child(inventory_detail_stats)
+	inventory_action_button = Button.new()
+	inventory_action_button.name = "InventoryActionButton"
+	inventory_action_button.text = "Equipar"
+	inventory_action_button.custom_minimum_size.y = 52
+	inventory_action_button.add_theme_font_size_override("font_size", 19)
+	inventory_action_button.disabled = true
+	inventory_action_button.pressed.connect(_perform_inventory_action)
+	column.add_child(inventory_action_button)
+
+func _build_inventory_stats_column():
+	inventory_stats_box = VBoxContainer.new()
+	inventory_stats_box.name = "CharacterStats"
+	inventory_stats_box.add_theme_constant_override("separation", 5)
+	inventory_stats_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_columns.add_child(inventory_stats_box)
+	_add_inventory_heading(inventory_stats_box, "ESTADO DEL PERSONAJE")
+
+func _add_inventory_heading(parent: Control, text_value: String):
+	var label := Label.new()
+	label.text = text_value
+	label.add_theme_color_override("font_color", Color("b79a5a"))
+	label.add_theme_font_size_override("font_size", 19)
+	parent.add_child(label)
+	parent.add_child(HSeparator.new())
+
+func _create_item_icon_frame(frame_size: Vector2) -> PanelContainer:
+	var frame := PanelContainer.new()
+	frame.custom_minimum_size = frame_size
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var frame_style := StyleBoxFlat.new()
+	frame_style.bg_color = Color("07090a")
+	frame_style.border_color = Color("6b5734")
+	frame_style.set_border_width_all(1)
+	frame_style.content_margin_left = 5
+	frame_style.content_margin_right = 5
+	frame_style.content_margin_top = 5
+	frame_style.content_margin_bottom = 5
+	frame.add_theme_stylebox_override("panel", frame_style)
+	var icon := TextureRect.new()
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	icon.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_child(icon)
+	return frame
 
 func _build_bonfire_menu():
 	bonfire_panel = PanelContainer.new()
@@ -542,10 +742,11 @@ func _refresh_class_details(index):
 		creator_stats_labels[attribute_name].text = str(int(class_data.attributes.get(attribute_name, 1)))
 	var weapon = Database.get_item(class_data.starting_weapon)
 	var armor = Database.get_item(class_data.starting_armor)
-	creator_equipment_label.text = "EQUIPO INICIAL\n%s\n%s\n\nDefensa: %d    Peso: %.1f" % [
+	creator_equipment_label.text = "EQUIPO INICIAL\n%s\n%s\n\nDefensa: %d    Poise: %.0f    Peso: %.1f" % [
 		weapon.display_name if weapon != null else "Sin arma",
 		armor.display_name if armor != null else "Sin armadura",
 		armor.defense if armor != null else 0,
+		armor.poise if armor != null else 0.0,
 		armor.weight if armor != null else 0.0
 	]
 	class_details.text = "[b]%s[/b]\n%s" % [class_data.display_name, class_data.description]
@@ -571,34 +772,232 @@ func _refresh_hud():
 func _refresh_inventory():
 	if inventory_panel == null:
 		return
-	for item_type in inventory_lists.keys():
-		var list = inventory_lists[item_type]
-		list.clear()
-		for item_id in Inventory.get_items_by_type(item_type):
-			var item = Database.get_item(item_id)
-			if item == null:
-				continue
-			var label = "%s x%d" % [item.display_name, Inventory.item_counts[item_id]]
-			if _is_equipped(item_id):
-				label += " *"
-			list.add_item(label)
-			list.set_item_metadata(list.get_item_count() - 1, item_id)
+	_refresh_inventory_slots()
+	_refresh_inventory_candidates()
+	_refresh_inventory_stats()
 
-func _is_equipped(item_id):
-	for value in Inventory.equipment.values():
-		if value == item_id:
-			return true
-	return false
+func _refresh_inventory_slots():
+	for slot in inventory_slot_buttons:
+		var button: Button = inventory_slot_buttons[slot]
+		var visuals: Dictionary = inventory_slot_visuals[slot]
+		var instance_id := Inventory.get_equipped_instance_id(slot)
+		var item_id := Inventory.get_instance_item_id(instance_id)
+		var item = Database.get_item(item_id)
+		var item_label: Label = visuals["item_label"]
+		var icon: TextureRect = visuals["icon"]
+		item_label.text = item.display_name if item != null else "Vacio"
+		icon.texture = IconCatalog.get_item_icon(item_id) if item != null else IconCatalog.get_empty_slot_icon()
+		button.button_pressed = slot == selected_inventory_slot
 
-func _activate_inventory_item(item_type, index):
-	var list = inventory_lists[item_type]
-	var item_id = list.get_item_metadata(index)
-	if item_type == "consumable":
-		Inventory.use_consumable(item_id)
-	else:
-		if not Inventory.equip_item(item_id):
-			notify("No cumplis los requisitos del item.")
+func _refresh_inventory_candidates():
+	if inventory_candidate_list == null:
+		return
+	var selected_still_exists := false
+	inventory_candidate_list.clear()
+	var item_type := str(Inventory.EQUIPMENT_TYPES.get(selected_inventory_slot, ""))
+	for instance_id in Inventory.get_instances_by_type(item_type):
+		var item_id := Inventory.get_instance_item_id(instance_id)
+		var item = Database.get_item(item_id)
+		if item == null:
+			continue
+		var equipped_slot := _slot_for_instance(instance_id)
+		var marker := " [Equipado: %s]" % _slot_label(equipped_slot) if equipped_slot != "" else ""
+		inventory_candidate_list.add_item("%s%s" % [item.display_name, marker], IconCatalog.get_item_icon(item_id))
+		var index: int = inventory_candidate_list.item_count - 1
+		inventory_candidate_list.set_item_metadata(index, instance_id)
+		if instance_id == selected_inventory_instance:
+			inventory_candidate_list.select(index)
+			selected_still_exists = true
+	if not selected_still_exists:
+		selected_inventory_instance = ""
+	_refresh_inventory_details()
+
+func _refresh_inventory_details():
+	var item_id := Inventory.get_instance_item_id(selected_inventory_instance)
+	var item = Database.get_item(item_id)
+	if item == null:
+		inventory_detail_icon.texture = IconCatalog.get_empty_slot_icon()
+		inventory_detail_name.text = "Selecciona un objeto"
+		inventory_detail_description.text = ""
+		inventory_detail_stats.text = ""
+		inventory_action_button.disabled = true
+		inventory_action_button.text = "Equipar"
+		return
+	inventory_detail_icon.texture = IconCatalog.get_item_icon(item_id)
+	inventory_detail_name.text = item.display_name
+	inventory_detail_description.text = item.description
+	inventory_detail_stats.text = _get_item_stats(item)
+	inventory_action_button.disabled = false
+	var is_equipped := Inventory.get_equipped_instance_id(selected_inventory_slot) == selected_inventory_instance
+	inventory_action_button.text = "Usar" if selected_inventory_slot == "consumable" and is_equipped else ("Equipado" if is_equipped else "Equipar")
+	inventory_action_button.disabled = is_equipped and selected_inventory_slot != "consumable"
+
+func _get_item_stats(item) -> String:
+	if item is WeaponData:
+		var requirements: Array[String] = []
+		for attribute in item.requirements:
+			requirements.append("%s %d" % [GameState.ATTRIBUTE_LABELS.get(attribute, attribute), item.requirements[attribute]])
+		var scaling: Array[String] = []
+		for attribute in item.scaling:
+			scaling.append("%s %s" % [GameState.ATTRIBUTE_LABELS.get(attribute, attribute), item.scaling[attribute]])
+		return "Dano: %d    Coste: %d / %d\nDano de poise: %.0f / %.0f\nRequisitos: %s\nEscalado: %s" % [item.base_damage, item.light_stamina_cost, item.heavy_stamina_cost, item.light_poise_damage, item.heavy_poise_damage, ", ".join(requirements), ", ".join(scaling)]
+	if item is ArmorData:
+		return "Defensa: %d    Poise: %.0f    Peso: %.1f" % [item.defense, item.poise, item.weight]
+	if item is RingData:
+		return "Vitalidad +%d    Aguante +%d    Defensa +%d" % [item.vitality_bonus, item.endurance_bonus, item.defense_bonus]
+	if item is ConsumableData:
+		return "Efecto: %s    Potencia: %d" % ["Curacion" if item.effect == "heal" else "Souls", item.amount]
+	return ""
+
+func _refresh_inventory_stats():
+	if inventory_stats_box == null:
+		return
+	while inventory_stats_box.get_child_count() > 2:
+		inventory_stats_box.get_child(2).free()
+	var class_data = Database.get_character_class(GameState.class_id)
+	var player = get_tree().get_first_node_in_group("player")
+	var maximum_poise: float = player.max_poise if player != null else 20.0 + Inventory.get_total_poise()
+	var progress_rows := [
+		["class", "Clase", class_data.display_name if class_data != null else "-"],
+		["level", "Nivel", GameState.level], ["souls", "Souls", GameState.souls]
+	]
+	var capacity_rows := [
+		["health", "Vida maxima", GameState.max_health], ["stamina", "Energia maxima", GameState.max_stamina],
+		["defense", "Defensa", Inventory.get_total_defense()], ["poise", "Poise maximo", int(round(maximum_poise))]
+	]
+	_add_inventory_stat_group("PROGRESO", progress_rows)
+	_add_inventory_stat_group("CAPACIDAD", capacity_rows)
+	var attribute_rows: Array = []
+	for attribute in GameState.ATTRIBUTES:
+		attribute_rows.append([attribute, GameState.ATTRIBUTE_LABELS[attribute], GameState.get_attribute(attribute)])
+	_add_inventory_stat_group("ATRIBUTOS", attribute_rows)
+
+func _add_inventory_stat_group(title_text: String, rows: Array):
+	var title := Label.new()
+	title.text = title_text
+	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_color_override("font_color", Color("8f846f"))
+	title.custom_minimum_size.y = 22
+	inventory_stats_box.add_child(title)
+	for row in rows:
+		var container := HBoxContainer.new()
+		container.custom_minimum_size.y = 34
+		container.add_theme_constant_override("separation", 10)
+		inventory_stats_box.add_child(container)
+		var icon := TextureRect.new()
+		icon.texture = IconCatalog.get_stat_icon(row[0])
+		icon.custom_minimum_size = Vector2(34, 34)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		container.add_child(icon)
+		var label := Label.new()
+		label.text = str(row[1])
+		label.add_theme_font_size_override("font_size", 18)
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		container.add_child(label)
+		var value := Label.new()
+		value.text = str(row[2])
+		value.add_theme_font_size_override("font_size", 18)
+		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value.add_theme_color_override("font_color", Color("e1c67e"))
+		container.add_child(value)
+
+func _select_inventory_slot(slot: String):
+	selected_inventory_slot = slot
+	selected_inventory_instance = Inventory.get_equipped_instance_id(slot)
 	_refresh_inventory()
+
+func _select_inventory_instance(index: int):
+	selected_inventory_instance = str(inventory_candidate_list.get_item_metadata(index))
+	_refresh_inventory_details()
+
+func _perform_inventory_action():
+	if selected_inventory_instance == "":
+		return
+	var equipped_here := Inventory.get_equipped_instance_id(selected_inventory_slot) == selected_inventory_instance
+	if selected_inventory_slot == "consumable" and equipped_here:
+		var item = Inventory.get_instance_item(selected_inventory_instance)
+		if Inventory.use_consumable_instance(selected_inventory_instance):
+			notify("Usaste %s." % item.display_name)
+	else:
+		if not Inventory.equip_instance(selected_inventory_slot, selected_inventory_instance):
+			notify("No cumplis los requisitos del objeto.")
+	_refresh_inventory()
+
+func _slot_for_instance(instance_id: String) -> String:
+	for slot in Inventory.equipment:
+		if Inventory.equipment[slot] == instance_id:
+			return slot
+	return ""
+
+func _slot_label(slot: String) -> String:
+	return {"right_weapon": "arma", "armor": "armadura", "ring_1": "anillo 1", "ring_2": "anillo 2", "consumable": "objeto util"}.get(slot, slot)
+
+func _show_slot_hover(slot: String):
+	var item = Inventory.get_instance_item(Inventory.get_equipped_instance_id(slot))
+	inventory_hover_name.text = item.display_name if item != null else "Vacio"
+
+func _on_inventory_list_input(event):
+	if not event is InputEventMouseMotion:
+		return
+	var index: int = inventory_candidate_list.get_item_at_position(event.position, true)
+	if index >= 0:
+		var item = Inventory.get_instance_item(str(inventory_candidate_list.get_item_metadata(index)))
+		inventory_hover_name.text = item.display_name if item != null else ""
+	else:
+		_clear_inventory_hover()
+
+func _clear_inventory_hover():
+	if inventory_hover_name != null:
+		inventory_hover_name.text = ""
+
+func _show_inventory_tab():
+	inventory_tab_button.button_pressed = true
+	settings_tab_button.button_pressed = false
+	inventory_view.show()
+	inventory_settings_view.hide()
+
+func _show_inventory_settings_tab():
+	inventory_tab_button.button_pressed = false
+	settings_tab_button.button_pressed = true
+	inventory_view.hide()
+	inventory_settings_view.show()
+	inventory_settings_controls.refresh()
+
+func _update_inventory_layout():
+	if inventory_window == null:
+		return
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var width: float = min(1680.0, max(300.0, viewport_size.x - 24.0))
+	var height: float = min(920.0, max(280.0, viewport_size.y - 24.0))
+	inventory_window.custom_minimum_size = Vector2(width, height)
+	inventory_root.custom_minimum_size.x = max(250.0, width - 44.0)
+	var compact: bool = width < 980.0
+	inventory_header.vertical = width < 760.0
+	inventory_columns.vertical = compact
+	for child in inventory_columns.get_children():
+		child.custom_minimum_size.x = 0.0 if compact else (width - 92.0) / 3.0
+	if inventory_candidate_list != null:
+		inventory_candidate_list.custom_minimum_size.y = 220.0 if compact else (245.0 if height < 760.0 else 350.0)
+
+func _exit_to_main_menu(change_scene := true) -> bool:
+	if inventory_exit_in_progress:
+		return false
+	inventory_exit_in_progress = true
+	var saved := SaveManager.save_game()
+	if not saved:
+		inventory_exit_in_progress = false
+		notify("No se pudo guardar. Permaneces en la partida.")
+		return false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if change_scene:
+		var error := get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+		if error != OK:
+			inventory_exit_in_progress = false
+			notify("No se pudo volver al menu (error %d)." % error)
+			return false
+	inventory_exit_in_progress = false
+	return true
 
 func toggle_inventory():
 	if not GameState.character_ready:
@@ -609,6 +1008,7 @@ func toggle_inventory():
 		close_inventory()
 	else:
 		_refresh_inventory()
+		_show_inventory_tab()
 		inventory_panel.show()
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -632,6 +1032,15 @@ func close_bonfire_menu():
 	level_panel.hide()
 	get_tree().call_group("player", "end_bonfire_rest")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+func hide_bonfire_menu_for_transition():
+	bonfire_panel.hide()
+	level_panel.hide()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func restore_bonfire_menu_after_transition():
+	bonfire_panel.show()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _refresh_travel_options():
 	travel_option.clear()

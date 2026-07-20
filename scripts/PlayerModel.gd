@@ -49,6 +49,8 @@ var has_pending_weapon = false
 var pending_armor = null
 var character_class_id := ""
 var roll_floor_y := 0.0
+var heavy_trail: GPUParticles3D = null
+var heavy_swing_effect: Node3D = null
 
 func _ready():
 	_build_materials()
@@ -103,6 +105,7 @@ func set_action_phase(kind: String, phase: String, progress: float):
 	action_progress = clamp(progress, 0.0, 1.0)
 	is_rolling = kind == "roll"
 	attack_active = kind == "attack"
+	set_heavy_trail_active(kind == "attack" and attack_kind == "heavy" and phase == "active")
 
 func set_roll_direction(local_direction: Vector3):
 	roll_local_direction = local_direction.normalized() if local_direction.length_squared() > 0.001 else Vector3.FORWARD
@@ -113,6 +116,8 @@ func set_equipped_weapon(weapon):
 		has_pending_weapon = true
 		return
 	has_pending_weapon = false
+	heavy_trail = null
+	heavy_swing_effect = null
 	_clear_slot("right_weapon")
 	if weapon == null:
 		return
@@ -125,16 +130,94 @@ func set_equipped_weapon(weapon):
 	slots["right_weapon"].add_child(mount)
 	if weapon.visual_scene != null:
 		mount.add_child(weapon.visual_scene.instantiate())
+	else:
+		match attack_family:
+			"axe":
+				_build_axe(mount)
+			"spear":
+				_build_spear(mount)
+			"mace":
+				_build_mace(mount)
+			_:
+				_build_sword(mount)
+	_build_heavy_trail(mount)
+
+func set_heavy_trail_active(active: bool):
+	if heavy_trail == null or not is_instance_valid(heavy_trail):
 		return
+	if active and not heavy_trail.emitting:
+		heavy_trail.restart()
+	heavy_trail.emitting = active
+	if heavy_swing_effect != null and is_instance_valid(heavy_swing_effect):
+		heavy_swing_effect.visible = active
+
+func _build_heavy_trail(parent: Node3D):
+	heavy_trail = GPUParticles3D.new()
+	heavy_trail.name = "HeavyWeaponTrail"
+	heavy_trail.amount = 96
+	heavy_trail.lifetime = 0.24
+	heavy_trail.local_coords = false
+	heavy_trail.emitting = false
+	heavy_trail.visibility_aabb = AABB(Vector3(-3.0, -3.0, -3.0), Vector3(6.0, 6.0, 6.0))
+	match attack_family:
+		"axe": heavy_trail.position = Vector3(0.0, -1.10, 0.0)
+		"spear": heavy_trail.position = Vector3(0.0, -0.12, -1.84)
+		"mace": heavy_trail.position = Vector3(0.0, -0.86, 0.0)
+		_: heavy_trail.position = Vector3(0.0, -1.18, -0.01)
+	var process = ParticleProcessMaterial.new()
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	process.emission_sphere_radius = 0.025
+	process.direction = Vector3.UP
+	process.spread = 180.0
+	process.initial_velocity_min = 0.02
+	process.initial_velocity_max = 0.12
+	process.gravity = Vector3.ZERO
+	process.scale_min = 0.55
+	process.scale_max = 1.0
+	heavy_trail.process_material = process
+	var fragment = BoxMesh.new()
+	fragment.size = Vector3(0.032, 0.17, 0.014)
+	var trail_material = StandardMaterial3D.new()
+	trail_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	trail_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	trail_material.albedo_color = Color(0.82, 0.86, 0.88, 0.58)
+	trail_material.emission_enabled = true
+	trail_material.emission = Color(0.54, 0.62, 0.66)
+	trail_material.emission_energy_multiplier = 1.25
+	fragment.material = trail_material
+	heavy_trail.draw_pass_1 = fragment
+	parent.add_child(heavy_trail)
+	_build_heavy_swing_effect(parent)
+
+func _build_heavy_swing_effect(parent: Node3D):
+	heavy_swing_effect = Node3D.new()
+	heavy_swing_effect.name = "HeavySwingEffect"
+	heavy_swing_effect.visible = false
+	parent.add_child(heavy_swing_effect)
 	match attack_family:
 		"axe":
-			_build_axe(mount)
+			for index in range(3):
+				_motion_blur_box(Vector3(0.70, 0.38, 0.025), Vector3(0.0, -1.10, 0.03 * index), Vector3(0.0, 0.0, 7.0 + index * 8.0), index)
 		"spear":
-			_build_spear(mount)
+			for index in range(3):
+				_motion_blur_box(Vector3(0.07, 0.05, 0.82), Vector3(0.0, -0.12, -1.52 + index * 0.16), Vector3.ZERO, index)
 		"mace":
-			_build_mace(mount)
+			for index in range(3):
+				_motion_blur_box(Vector3(0.46, 0.42, 0.025), Vector3(0.0, -0.86, 0.03 * index), Vector3(0.0, 0.0, -7.0 - index * 8.0), index)
 		_:
-			_build_sword(mount)
+			for index in range(3):
+				_motion_blur_box(Vector3(0.15, 1.06, 0.025), Vector3(0.0, -0.80, 0.03 * index), Vector3(0.0, 0.0, 6.0 + index * 7.0), index)
+
+func _motion_blur_box(size: Vector3, position: Vector3, rotation_degrees_value: Vector3, index: int):
+	var material = StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.albedo_color = Color(0.66, 0.75, 0.80, 0.24 - index * 0.055)
+	material.emission_enabled = true
+	material.emission = Color(0.40, 0.49, 0.54)
+	material.emission_energy_multiplier = 1.15
+	_box(heavy_swing_effect, "MotionBlur%d" % index, size, position, material, rotation_degrees_value)
 
 func set_equipped_armor(armor):
 	pending_armor = armor

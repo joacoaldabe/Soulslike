@@ -1,6 +1,7 @@
 extends SceneTree
 
 const TEST_SAVE_PATH := "user://soulslike_save_test.json"
+const TEST_SETTINGS_PATH := "user://soulslike_settings_test.cfg"
 
 var failures: Array[String] = []
 
@@ -21,11 +22,14 @@ func _write_test_file(content: String):
 		file.store_string(content)
 		file.close()
 
-func _same_item_counts(left: Dictionary, right: Dictionary) -> bool:
+func _same_instances(left: Array, right: Dictionary) -> bool:
 	if left.size() != right.size():
 		return false
-	for item_id in left.keys():
-		if not right.has(item_id) or int(left[item_id]) != int(right[item_id]):
+	for instance in left:
+		if not instance is Dictionary:
+			return false
+		var instance_id := str(instance.get("instance_id", ""))
+		if not right.has(instance_id) or right[instance_id] != instance:
 			return false
 	return true
 
@@ -35,8 +39,11 @@ func _run():
 	var game_state = root.get_node("GameState")
 	var inventory = root.get_node("Inventory")
 	var database = root.get_node("Database")
+	var app_settings = root.get_node("AppSettings")
 	save_manager.set_save_path_for_tests(TEST_SAVE_PATH)
 	save_manager.delete_save()
+	app_settings.set_settings_path_for_tests(TEST_SETTINGS_PATH)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SETTINGS_PATH))
 	_expect(ProjectSettings.get_setting("application/run/main_scene") == "res://scenes/MainMenu.tscn", "project starts in the main menu")
 
 	var menu = load("res://scenes/MainMenu.tscn").instantiate()
@@ -51,7 +58,14 @@ func _run():
 		menu.exit_button.text
 	] == ["Nuevo juego", "Cargar juego", "Configuracion", "Salir"], "main menu options keep the required order")
 	menu._show_settings()
-	_expect(menu.settings_panel.visible and not menu.menu_panel.visible, "settings opens its prepared placeholder section")
+	_expect(menu.settings_panel.visible and not menu.menu_panel.visible, "settings opens its functional section")
+	_expect(menu.settings_controls.resolution_selector.item_count > 0 and menu.settings_controls.window_mode_selector.item_count == 2, "main menu exposes resolution and window mode settings")
+	app_settings.set_resolution(Vector2i(1366, 768))
+	app_settings.set_fullscreen(false)
+	app_settings.set_vsync(false)
+	app_settings.resolution = Vector2i(1280, 720)
+	app_settings.vsync = true
+	_expect(app_settings.load_settings() and app_settings.resolution == Vector2i(1366, 768) and not app_settings.vsync, "display settings persist through the shared configuration source")
 	menu._hide_settings()
 
 	for resolution in [Vector2i(1280, 720), Vector2i(1920, 1080), Vector2i(2560, 1080), Vector2i(360, 480)]:
@@ -62,6 +76,11 @@ func _run():
 		var expected_center := Vector2(resolution) * 0.5
 		_expect(panel_rect.get_center().distance_to(expected_center) < 3.0, "menu stays centered at %dx%d" % [resolution.x, resolution.y])
 		_expect(panel_rect.size.x <= 460.0 and panel_rect.position.x >= 24.0 and panel_rect.end.x <= resolution.x - 24.0, "menu keeps responsive width and safe margins at %dx%d" % [resolution.x, resolution.y])
+		menu._show_settings()
+		await process_frame
+		var settings_rect: Rect2 = menu.settings_panel.get_global_rect()
+		_expect(settings_rect.position.y >= 24.0 and settings_rect.end.y <= resolution.y - 24.0, "settings remain inside the viewport at %dx%d" % [resolution.x, resolution.y])
+		menu._hide_settings()
 
 	menu._begin_new_game(false)
 	_expect(game_session.start_mode == game_session.StartMode.NEW_GAME and not game_state.character_ready, "new game prepares a clean session")
@@ -74,6 +93,9 @@ func _run():
 	root.add_child(main_scene)
 	await process_frame
 	await process_frame
+	main_scene.fog_transition.entrance_duration = 0.01
+	main_scene.fog_transition.full_coverage_pause = 0.0
+	main_scene.fog_transition.exit_duration = 0.01
 	var player = get_first_node_in_group("player")
 	_expect(player != null, "new game reaches the playable scene")
 	game_state.level = 8
@@ -82,26 +104,29 @@ func _run():
 	game_state._recalculate_derived_stats()
 	game_state.health = game_state.max_health - 37
 	game_state.stamina = game_state.max_stamina - 13
-	inventory.add_item("battle_axe", 1)
+	var axe_instances = inventory.add_item("battle_axe", 1)
 	inventory.add_item("green_estus", 4)
-	inventory.equipment["right_weapon"] = "battle_axe"
-	inventory.emit_signal("equipment_changed")
+	_expect(not axe_instances.is_empty() and inventory.equip_instance("right_weapon", axe_instances[0]), "equipment stores an owned item instance")
 	game_state.discover_bonfire("ash_camp", Vector3.ZERO)
 	var rest_bonfire = get_nodes_in_group("bonfires").filter(func(node): return node.bonfire_id == "ruined_gate")[0]
 	rest_bonfire.interact(player)
 	await process_frame
 	main_scene._on_rest_requested()
+	for _frame in range(30):
+		if not main_scene.fog_transition.is_active():
+			break
+		await process_frame
 	_expect(save_manager.has_save_file(), "resting at a bonfire creates the save file")
 	var saved_data = save_manager.load_game()
-	_expect(saved_data != null and int(saved_data["save_version"]) == 1, "save contains its version")
+	_expect(saved_data != null and int(saved_data["save_version"]) == 2, "save contains its version")
 	_expect(saved_data["player"].has("level") and saved_data["player"].has("souls") and saved_data["player"].has("attributes"), "save contains level, souls and attributes")
 	_expect(saved_data["player"].has("health") and saved_data["player"].has("stamina") and saved_data["player"].has("souls_to_next_level"), "save contains current resources and next level cost")
-	_expect(_same_item_counts(saved_data["inventory"]["item_counts"], inventory.item_counts), "save contains the complete inventory")
+	_expect(_same_instances(saved_data["inventory"]["instances"], inventory.item_instances), "save contains every independent item instance")
 	_expect(saved_data["world"]["last_bonfire_id"] == "ruined_gate", "save contains the last rested bonfire id")
 	var saved_level: int = game_state.level
 	var saved_souls: int = game_state.souls
 	var saved_strength := int(game_state.attributes["strength"])
-	var saved_inventory: Dictionary = inventory.item_counts.duplicate(true)
+	var saved_inventory: Dictionary = inventory.item_instances.duplicate(true)
 	var saved_equipment: Dictionary = inventory.equipment.duplicate(true)
 
 	main_scene.queue_free()
@@ -119,7 +144,24 @@ func _run():
 	var expected_spawn: Vector3 = rest_bonfire.global_position if is_instance_valid(rest_bonfire) else database.get_bonfire("ruined_gate").position
 	_expect(game_state.current_bonfire_id == "ruined_gate" and loaded_player.global_position.distance_to(expected_spawn + Vector3(0, 0, -1.7)) < 0.1, "loaded player appears at the saved bonfire")
 	_expect(game_state.level == saved_level and game_state.souls == saved_souls and int(game_state.attributes["strength"]) == saved_strength, "loaded stats match saved stats")
-	_expect(inventory.item_counts == saved_inventory and inventory.equipment == saved_equipment, "loaded inventory and equipment match the save")
+	_expect(inventory.item_instances == saved_inventory and inventory.equipment == saved_equipment, "loaded instances and equipment ids match the save")
+
+	var duplicate_ids = inventory.add_item("longsword", 3)
+	_expect(duplicate_ids.size() == 3 and duplicate_ids[0] != duplicate_ids[1] and duplicate_ids[1] != duplicate_ids[2], "repeated items receive stable independent ids")
+	var legacy_data := {
+		"save_version": 1,
+		"player": game_state.get_save_data(),
+		"inventory": {
+			"item_counts": {"longsword": 2, "life_ring": 2, "green_estus": 3},
+			"equipment": {"right_weapon": "longsword", "ring_1": "life_ring", "ring_2": "life_ring", "consumable": "green_estus"}
+		},
+		"world": game_state.get_world_save_data()
+	}
+	_write_test_file(JSON.stringify(legacy_data))
+	var loaded_legacy = save_manager.load_game()
+	_expect(loaded_legacy != null and inventory.apply_save_data(loaded_legacy["inventory"]), "version 1 inventory migrates without data loss")
+	_expect(inventory.get_item_count("longsword") == 2 and inventory.get_item_count("life_ring") == 2 and inventory.get_item_count("green_estus") == 3, "legacy counts become independent instances")
+	_expect(inventory.get_equipped_item_id("right_weapon") == "longsword" and inventory.get_equipped_item_id("ring_1") == "life_ring" and inventory.get_equipped_item_id("ring_2") == "life_ring", "legacy equipment maps to compatible unique instances")
 
 	loaded_main.queue_free()
 	await process_frame
@@ -174,6 +216,8 @@ func _run():
 
 	save_manager.delete_save()
 	save_manager.reset_save_path()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SETTINGS_PATH))
+	app_settings.reset_settings_path()
 	root.size = Vector2i(1152, 648)
 	if failures.is_empty():
 		print("SAVE_AND_MAIN_MENU_OK")

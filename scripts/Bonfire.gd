@@ -50,6 +50,7 @@ func _setup_visuals():
 	tween.tween_property(light,"light_energy",3.0,0.55).set_trans(Tween.TRANS_SINE)
 	tween.tween_property(light,"light_energy",2.1,0.65).set_trans(Tween.TRANS_SINE)
 	var particles = GPUParticles3D.new()
+	particles.name = "BonfireSparks"
 	particles.amount = 22
 	particles.lifetime = 1.4
 	particles.position.y = 0.45
@@ -59,12 +60,15 @@ func _setup_visuals():
 	process.initial_velocity_min = 0.7
 	process.initial_velocity_max = 1.7
 	process.gravity = Vector3(0,0.3,0)
-	process.scale_min = 0.025
-	process.scale_max = 0.07
+	process.scale_min = 0.55
+	process.scale_max = 1.15
 	particles.process_material = process
 	var spark = QuadMesh.new()
-	spark.size = Vector2(0.05,0.05)
-	spark.material = VisualLibrary.material("fire")
+	spark.size = Vector2(0.09,0.09)
+	var spark_material := VisualLibrary.material("fire").duplicate() as StandardMaterial3D
+	spark_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	spark_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	spark.material = spark_material
 	particles.draw_pass_1 = spark
 	add_child(particles)
 

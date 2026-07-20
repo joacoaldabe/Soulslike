@@ -8,4 +8,5 @@ item_id = "knight_set"
 display_name = "Knight Set"
 description = "Armadura pesada con buena reduccion de dano."
 defense = 16
+poise = 32.0
 weight = 2.8

@@ -8,6 +8,8 @@ class_name WeaponData
 @export var base_damage = 40
 @export var light_stamina_cost = 18
 @export var heavy_stamina_cost = 32
+@export var light_poise_damage = 18.0
+@export var heavy_poise_damage = 54.0
 @export var requirements = {}
 @export var scaling = {}
 @export var attack_reach = 2.0

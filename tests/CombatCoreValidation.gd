@@ -1,11 +1,24 @@
 extends SceneTree
 
+class ImpactProbe:
+	extends Node
+	var impact_count := 0
+	var last_impact_type := ""
+
+	func spawn_combat_impact(_position: Vector3, _direction: Vector3, impact_type: String):
+		impact_count += 1
+		last_impact_type = impact_type
+
+	func request_hit_stop(_duration: float):
+		pass
+
 var failures: Array[String] = []
 var game_state
 var inventory
 var database
 var world: Node3D
 var player
+var impact_probe: ImpactProbe
 
 func _initialize():
 	call_deferred("_run")
@@ -39,6 +52,9 @@ func _run():
 
 	world = Node3D.new()
 	root.add_child(world)
+	impact_probe = ImpactProbe.new()
+	root.add_child(impact_probe)
+	impact_probe.add_to_group("game")
 	var floor = StaticBody3D.new()
 	var floor_collision = CollisionShape3D.new()
 	var floor_shape = BoxShape3D.new()
@@ -52,6 +68,7 @@ func _run():
 	world.add_child(player)
 	await physics_frame
 	await physics_frame
+	_expect(player.max_poise == player.player_base_poise + inventory.get_total_poise(), "equipped armor contributes its explicit poise value to the player")
 
 	_expect(player.get_logical_forward().dot(Vector3.FORWARD) > 0.99, "logical forward is Godot -Z")
 	_expect(player.visual_model.VISUAL_FORWARD == Vector3.FORWARD, "visual model uses the same -Z forward")
@@ -140,14 +157,66 @@ func _run():
 	poise_hollow.receive_hit(heavy_hit)
 	var heavy_loss = poise_after_light - poise_hollow.poise
 	_expect(heavy_hit.poise_damage >= light_hit.poise_damage * 3.0, "heavy attack carries three times the light poise value")
-	_expect(heavy_loss > light_loss, "heavy attack visibly removes more enemy poise")
+	_expect(heavy_loss > 0.0 and poise_hollow.state == "stagger", "heavy poise damage breaks the remaining enemy poise")
+	poise_hollow.action.cancel()
+	poise_hollow.state = "idle"
+	poise_hollow.poise = poise_hollow.max_poise - 10.0
+	poise_hollow.poise_recovery_timer = poise_hollow.data.poise_recovery_delay
+	var hollow_poise_before_recovery = poise_hollow.poise
+	poise_hollow._update_poise(poise_hollow.data.poise_recovery_delay * 0.5)
+	_expect(poise_hollow.poise == hollow_poise_before_recovery, "enemy poise does not regenerate during its recovery delay")
+	poise_hollow._update_poise(poise_hollow.data.poise_recovery_delay)
+	poise_hollow._update_poise(10.0)
+	_expect(is_equal_approx(poise_hollow.poise, poise_hollow.max_poise), "enemy poise regenerates completely after the delay")
 	for weapon in database.list_weapons():
 		var weapon_light_damage = game_state.calculate_weapon_damage(weapon, "light")
 		var weapon_heavy_damage = game_state.calculate_weapon_damage(weapon, "heavy")
 		_expect(weapon_heavy_damage >= weapon_light_damage * 1.65 and weapon_heavy_damage <= weapon_light_damage * 1.75, "%s heavy damage is 1.7x light damage" % weapon.display_name)
 		_expect(weapon.heavy_stamina_cost > weapon.light_stamina_cost, "%s keeps its higher heavy stamina cost" % weapon.display_name)
+		_expect(weapon.light_poise_damage > 0.0 and weapon.heavy_poise_damage > weapon.light_poise_damage, "%s defines distinct light and heavy poise damage" % weapon.display_name)
 	var heavy_guard = _spawn_enemy("axe_brute", Vector3(9,0,-9))
-	_expect(heavy_guard.max_poise > poise_hollow.max_poise * 2.0, "heavy guard has substantially more poise")
+	_expect(heavy_guard.max_poise > poise_hollow.max_poise, "heavy guard has more poise than a weak enemy")
+	for weak_enemy_id in ["ash_hound", "hollow_sword"]:
+		var weak_enemy = _spawn_enemy(weak_enemy_id, Vector3(10, 0, -10))
+		weak_enemy.receive_hit(CombatHit.new(player, 1, 18.0, Vector3.FORWARD, weak_enemy.global_position, 1.0, "light", 230 + weak_enemy.get_instance_id()))
+		_expect(weak_enemy.state == "stagger", "%s staggers from one light hit" % weak_enemy_id)
+	for strong_enemy_id in ["spear_guard", "axe_brute"]:
+		var strong_enemy = _spawn_enemy(strong_enemy_id, Vector3(11, 0, -11))
+		strong_enemy.receive_hit(CombatHit.new(player, 1, 30.0, Vector3.FORWARD, strong_enemy.global_position, 1.0, "light", 240 + strong_enemy.get_instance_id()))
+		_expect(strong_enemy.state != "stagger", "%s resists the first light hit" % strong_enemy_id)
+		strong_enemy.receive_hit(CombatHit.new(player, 1, 30.0, Vector3.FORWARD, strong_enemy.global_position, 1.0, "light", 250 + strong_enemy.get_instance_id()))
+		_expect(strong_enemy.state == "stagger", "%s staggers from the second light hit" % strong_enemy_id)
+
+	_reset_player_action()
+	player.poise = player.max_poise
+	player._start_attack("light")
+	player.receive_hit(CombatHit.new(heavy_guard, 0, player.max_poise - 1.0, Vector3.BACK, player.global_position, 1.0, "light", 250))
+	_expect(player.action_kind == "attack" and player.is_attacking, "a hit below the player's poise threshold does not interrupt an attack")
+	player.receive_hit(CombatHit.new(heavy_guard, 0, 2.0, Vector3.BACK, player.global_position, 1.0, "light", 251))
+	_expect(player.action_kind == "stagger" and not player.is_attacking, "accumulated poise damage breaks poise and interrupts the player")
+	_reset_player_action()
+	player.poise = player.max_poise - 10.0
+	player.poise_recovery_timer = player.poise_recovery_delay
+	var player_poise_before_recovery = player.poise
+	player._update_poise(player.poise_recovery_delay * 0.5)
+	_expect(player.poise == player_poise_before_recovery, "player poise does not regenerate while the recovery delay is active")
+	player._update_poise(player.poise_recovery_delay)
+	player._update_poise(10.0)
+	_expect(is_equal_approx(player.poise, player.max_poise), "player poise regenerates completely after avoiding further hits")
+
+	_reset_player_action()
+	player.global_position = Vector3(-8.0,0.0,-8.0)
+	player.attack_type = "heavy"
+	player.attack_direction = Vector3.FORWARD
+	player.current_attack_id += 1
+	var impact_count_before = impact_probe.impact_count
+	_expect(not player._apply_attack_hit() and impact_probe.impact_count == impact_count_before, "missed heavy attack creates no enemy impact")
+	var impact_enemy = _spawn_enemy("hollow_sword", player.global_position + Vector3.FORWARD * 1.45)
+	player.current_attack_id += 1
+	_expect(player._apply_attack_hit(), "heavy attack reports contact with an enemy")
+	_expect(impact_probe.impact_count == impact_count_before + 1 and impact_probe.last_impact_type == "heavy", "heavy contact creates exactly one heavy impact")
+	impact_enemy.global_position = Vector3(12.0,0.0,-12.0)
+	player.global_position = Vector3.ZERO
 
 	var duplicate_enemy = _spawn_enemy("hollow_sword", Vector3(10,0,-10))
 	var duplicate_hit = CombatHit.new(player,7,5,Vector3.FORWARD,duplicate_enemy.global_position,1,"light",301)

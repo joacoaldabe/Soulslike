@@ -9,6 +9,8 @@ var load_game_button: Button
 var settings_button: Button
 var exit_button: Button
 var settings_panel: PanelContainer
+var settings_controls: SettingsPanel
+var settings_back_button: Button
 var overwrite_dialog: ConfirmationDialog
 var error_dialog: AcceptDialog
 var menu_theme: Theme
@@ -127,23 +129,25 @@ func _build_menu():
 	settings_panel.name = "SettingsPanel"
 	settings_panel.theme = menu_theme
 	center.add_child(settings_panel)
+	var settings_scroll := ScrollContainer.new()
+	settings_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	settings_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	settings_panel.add_child(settings_scroll)
 	var settings_box := VBoxContainer.new()
 	settings_box.add_theme_constant_override("separation", 18)
-	settings_panel.add_child(settings_box)
+	settings_scroll.add_child(settings_box)
 	var settings_title := Label.new()
 	settings_title.text = "CONFIGURACION"
 	settings_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	settings_title.add_theme_font_size_override("font_size", 28)
 	settings_box.add_child(settings_title)
-	var coming_soon := Label.new()
-	coming_soon.text = "Proximamente"
-	coming_soon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	coming_soon.custom_minimum_size.y = 100
-	settings_box.add_child(coming_soon)
-	var back_button := Button.new()
-	back_button.text = "Volver"
-	back_button.pressed.connect(_hide_settings.bind(back_button))
-	settings_box.add_child(back_button)
+	settings_controls = SettingsPanel.new()
+	settings_controls.show_exit_to_menu = false
+	settings_box.add_child(settings_controls)
+	settings_back_button = Button.new()
+	settings_back_button.text = "Volver"
+	settings_back_button.pressed.connect(_hide_settings.bind(settings_back_button))
+	settings_box.add_child(settings_back_button)
 	settings_panel.hide()
 
 func _add_menu_button(text: String) -> Button:
@@ -170,7 +174,7 @@ func _update_responsive_layout():
 	var safe_width: float = max(260.0, viewport_size.x - 48.0)
 	var panel_width: float = min(460.0, safe_width)
 	menu_panel.custom_minimum_size = Vector2(panel_width, 0)
-	settings_panel.custom_minimum_size = Vector2(panel_width, 290)
+	settings_panel.custom_minimum_size = Vector2(panel_width, min(560.0, max(280.0, viewport_size.y - 48.0)))
 	if title_label != null:
 		title_label.add_theme_font_size_override("font_size", 24 if panel_width < 380.0 else 34)
 
@@ -205,10 +209,8 @@ func _begin_load_game(change_scene := true):
 func _show_settings():
 	menu_panel.hide()
 	settings_panel.show()
-	for child in settings_panel.get_child(0).get_children():
-		if child is Button:
-			child.grab_focus()
-			break
+	settings_controls.refresh()
+	settings_back_button.grab_focus()
 
 func _hide_settings(_button = null):
 	settings_panel.hide()

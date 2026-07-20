@@ -195,7 +195,8 @@ func _setup_input_actions():
 	_ensure_key_action("inventory", KEY_I)
 	_ensure_key_action("lock_on", KEY_Q)
 	_ensure_key_action("use_item", KEY_R)
-	_ensure_key_action("heavy_attack", KEY_F)
+	if InputMap.has_action("heavy_attack"):
+		InputMap.erase_action("heavy_attack")
 	_ensure_mouse_action("light_attack", MOUSE_BUTTON_LEFT)
 
 func _ensure_key_action(action_name, keycode):

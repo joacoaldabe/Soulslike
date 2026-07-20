@@ -8,4 +8,5 @@ item_id = "thief_set"
 display_name = "Thief Garb"
 description = "Vestimenta oscura que prioriza movilidad y sigilo."
 defense = 5
+poise = 3.0
 weight = 0.8

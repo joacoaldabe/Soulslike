@@ -30,6 +30,8 @@ func _reset_player(position := Vector3.ZERO):
 	Input.action_release("move_left")
 	Input.action_release("move_right")
 	Input.action_release("run")
+	Input.action_release("light_attack")
+	player._cancel_attack_press()
 	player._release_lock_target()
 	player.action.cancel()
 	player._finish_action()
@@ -173,6 +175,26 @@ func _run():
 	_expect(player.current_attack_id > first_sequence and player.action_kind == "attack", "8 late-recovery input chains consecutive light attacks")
 	await _wait_for_action(player)
 	await _reset_player()
+	_expect(not InputMap.has_action("heavy_attack"), "9 F no longer has a separate heavy attack action")
+	var attack_before_tap = player.current_attack_id
+	Input.action_press("light_attack")
+	await physics_frame
+	_expect(player.current_attack_id == attack_before_tap, "9 pressing attack waits to distinguish a tap from a hold")
+	Input.action_release("light_attack")
+	await physics_frame
+	_expect(player.current_attack_id == attack_before_tap + 1 and player.attack_type == "light", "9 releasing before the threshold starts one light attack")
+	await _wait_for_action(player)
+	await _reset_player()
+	var attack_before_hold = player.current_attack_id
+	Input.action_press("light_attack")
+	await create_timer(player.ATTACK_HOLD_THRESHOLD + 0.06).timeout
+	_expect(player.current_attack_id == attack_before_hold + 1 and player.attack_type == "heavy", "9 holding the attack button starts one heavy attack")
+	var held_attack_id = player.current_attack_id
+	Input.action_release("light_attack")
+	await physics_frame
+	_expect(player.current_attack_id == held_attack_id, "9 releasing after a heavy attack does not add a light attack")
+	await _wait_for_action(player)
+	await _reset_player()
 	var stamina_before_heavy = game_state.stamina
 	player._start_attack("heavy")
 	var heavy_duration = player.action.get_total_duration()
@@ -260,11 +282,10 @@ func _run():
 
 	var brute = _spawn_enemy("axe_brute", Vector3(8, 0, -8))
 	var brute_start_poise = brute.poise
-	for hit_index in range(3):
-		brute.receive_hit(_next_hit(player, 1, 30.0, Vector3.FORWARD, "heavy"))
-	_expect(brute.state != "stagger" and brute.poise < brute_start_poise, "18 heavy guard resists several heavy poise hits")
 	brute.receive_hit(_next_hit(player, 1, 30.0, Vector3.FORWARD, "heavy"))
-	_expect(brute.state == "stagger", "18 repeated heavy hits eventually stagger the guard")
+	_expect(brute.state != "stagger" and brute.poise < brute_start_poise, "18 heavy guard resists the first poise hit")
+	brute.receive_hit(_next_hit(player, 1, 30.0, Vector3.FORWARD, "heavy"))
+	_expect(brute.state == "stagger", "18 the second poise hit staggers the guard")
 	_expect(brute.action.get_phase_duration() >= 0.70, "18 heavy poise break produces a longer stagger")
 
 	# 19: each archetype can be intentionally rolled through on its own timing.

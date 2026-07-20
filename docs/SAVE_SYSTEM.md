@@ -5,7 +5,7 @@
 - `SaveManager` coordina lectura, validacion, version y escritura segura del archivo. Obtiene datos serializables de los sistemas existentes y no conoce nodos visuales.
 - `GameSession` conserva la solicitud de inicio (`NEW_GAME` o `LOAD_GAME`) durante el cambio de escena y entrega una carga pendiente una sola vez.
 - `GameState` exporta e importa progreso, atributos, recursos y estado global del mundo.
-- `Inventory` exporta e importa cantidades y equipamiento, validando que los identificadores existan y correspondan al slot.
+- `Inventory` exporta e importa instancias independientes y equipamiento, validando que cada identificador exista y corresponda al slot.
 - `MainMenu` controla solamente la interfaz, confirmaciones y navegacion hacia la escena jugable.
 - `Main` aplica la carga en orden: clase predeterminada, inventario, estado del jugador/mundo y resolucion del bonfire de aparicion.
 
@@ -13,11 +13,11 @@
 
 La partida unica se guarda en `user://soulslike_save.json`. La ruta fisica depende del sistema operativo y del nombre del proyecto. Las pruebas usan `user://soulslike_save_test.json` y lo eliminan al finalizar.
 
-La version actual es `1`:
+La version actual es `2`:
 
 ```json
 {
-  "save_version": 1,
+  "save_version": 2,
   "player": {
     "class_id": "knight",
     "level": 8,
@@ -34,10 +34,14 @@ La version actual es `1`:
     "bloodstain_position": [0, 0, 0]
   },
   "inventory": {
-    "item_counts": {},
+    "instances": [
+      {"instance_id": "longsword:00000001", "item_id": "longsword"},
+      {"instance_id": "knight_set:00000002", "item_id": "knight_set"}
+    ],
+    "next_instance_serial": 3,
     "equipment": {
-      "right_weapon": "longsword",
-      "armor": "knight_set",
+      "right_weapon": "longsword:00000001",
+      "armor": "knight_set:00000002",
       "ring_1": "",
       "ring_2": "",
       "consumable": "green_estus"
@@ -51,7 +55,7 @@ La version actual es `1`:
 }
 ```
 
-Solo se guardan valores primitivos, arrays, diccionarios e identificadores estables. La escritura usa un archivo `.tmp`; si ya existe una partida, la conserva temporalmente como `.bak` hasta publicar correctamente el reemplazo.
+Solo se guardan valores primitivos, arrays, diccionarios e identificadores estables. Cada copia de un objeto tiene su propio `instance_id`; las partidas version 1 con `item_counts` se migran automaticamente sin perder cantidades ni equipo. La escritura usa un archivo `.tmp`; si ya existe una partida, la conserva temporalmente como `.bak` hasta publicar correctamente el reemplazo.
 
 ## Flujo
 
@@ -114,6 +118,6 @@ Cada recurso de `data/bonfires/` debe definir un `bonfire_id` unico y permanente
 ## Limitaciones conocidas
 
 - Existe un unico slot de guardado.
-- La seccion Configuracion es un placeholder y no persiste opciones.
+- La configuracion de resolucion, modo de ventana y VSync se guarda por separado en `user://soulslike_settings.cfg`.
 - El estado individual de cofres y enemigos no forma parte de la version 1; al cargar se reconstruyen con el comportamiento normal de la escena.
-- Las migraciones estan preparadas a nivel de versionado y valores predeterminados, pero no hay migraciones historicas porque solo existe la version 1.
+- La version 2 migra inventarios de version 1 basados en cantidades a instancias independientes.

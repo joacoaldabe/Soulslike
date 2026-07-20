@@ -64,7 +64,7 @@ func _execute_command(raw_command: String):
 			await create_timer(float(argument) if argument != "" else 0.45,true,false,true).timeout
 			Input.action_release("run")
 			Input.action_release("move_forward")
-		"light_attack", "heavy_attack", "roll", "lock_on":
+		"light_attack", "roll", "lock_on":
 			var press = InputEventAction.new()
 			press.action = command
 			press.pressed = true
@@ -72,6 +72,16 @@ func _execute_command(raw_command: String):
 			await physics_frame
 			var release = InputEventAction.new()
 			release.action = command
+			release.pressed = false
+			Input.parse_input_event(release)
+		"heavy_attack":
+			var press = InputEventAction.new()
+			press.action = "light_attack"
+			press.pressed = true
+			Input.parse_input_event(press)
+			await create_timer(0.50, true, false, true).timeout
+			var release = InputEventAction.new()
+			release.action = "light_attack"
 			release.pressed = false
 			Input.parse_input_event(release)
 		"camera_yaw":

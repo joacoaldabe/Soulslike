@@ -8,4 +8,5 @@ item_id = "bandit_set"
 display_name = "Bandit Harness"
 description = "Arnes reforzado para combatientes de gran fuerza."
 defense = 10
+poise = 15.0
 weight = 1.6

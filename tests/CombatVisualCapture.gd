@@ -33,6 +33,14 @@ func _run():
 	enemy = enemies.filter(func(candidate): return candidate.enemy_id == "hollow_sword")[0]
 	for other in enemies:
 		other.set_physics_process(false)
+	var test_floor = StaticBody3D.new()
+	var floor_collision = CollisionShape3D.new()
+	var floor_shape = BoxShape3D.new()
+	floor_shape.size = Vector3(12.0, 0.2, 12.0)
+	floor_collision.shape = floor_shape
+	floor_collision.position.y = -0.1
+	test_floor.add_child(floor_collision)
+	main_scene.add_child(test_floor)
 	player.global_position = Vector3(0,0,1.8)
 	player.rotation.y = 0.0
 	player.camera_pivot.rotation = Vector3.ZERO
@@ -51,6 +59,17 @@ func _run():
 	await _capture("combat_player_active")
 	await _wait_for_phase(player,"recovery")
 	await _capture("combat_player_recovery")
+	await create_timer(0.55).timeout
+
+	player.action.cancel()
+	player._finish_action()
+	enemy.health = enemy.data.max_health
+	enemy.poise = enemy.max_poise
+	enemy.global_position = player.global_position + player.get_logical_forward() * 1.55
+	player._start_attack("heavy")
+	await _wait_for_phase(player,"active")
+	await create_timer(0.06).timeout
+	await _capture("combat_heavy_trail_impact")
 	await create_timer(0.55).timeout
 
 	player.action.cancel()

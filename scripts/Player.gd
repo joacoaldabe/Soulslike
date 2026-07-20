@@ -7,6 +7,7 @@ const GRAVITY = 24.0
 const STAMINA_REGEN = 28.0
 const RUN_STAMINA_PER_SECOND = 12.0
 const ROLL_COST = 28
+const ATTACK_HOLD_THRESHOLD = 0.45
 const LOGICAL_FORWARD = Vector3.FORWARD
 const PlayerModelScene = preload("res://scenes/PlayerModel.tscn")
 
@@ -28,7 +29,7 @@ const PlayerModelScene = preload("res://scenes/PlayerModel.tscn")
 @export var combat_debug := false
 
 @export_group("Combat")
-@export var player_max_poise := 58.0
+@export var player_base_poise := 20.0
 @export var poise_recovery_delay := 1.15
 @export var poise_recovery_rate := 34.0
 @export var stagger_duration := 0.52
@@ -45,6 +46,7 @@ var action := CombatAction.new()
 var action_kind := ""
 var is_rolling := false
 var is_resting_at_bonfire := false
+var transition_locked := false
 var run_requires_release := false
 var bonfire_pose_progress := 0.0
 var bonfire_transition_direction := 0.0
@@ -56,6 +58,8 @@ var attack_has_hit := false
 var attack_sequence := 0
 var current_attack_id := 0
 var buffered_attack := ""
+var attack_press_active := false
+var attack_hold_time := 0.0
 var last_move_direction := Vector3.FORWARD
 var last_move_age := 999.0
 var desired_facing := Vector3.FORWARD
@@ -73,7 +77,7 @@ func _ready():
 	_setup_body()
 	_update_equipment_visuals()
 	Inventory.equipment_changed.connect(_update_equipment_visuals)
-	max_poise = player_max_poise + Inventory.get_total_defense() * 1.4
+	max_poise = player_base_poise + Inventory.get_total_poise()
 	poise = max_poise
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -127,6 +131,8 @@ func _setup_body():
 	add_child(debug_label)
 
 func _unhandled_input(event):
+	if transition_locked:
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		camera_pivot.rotate_y(-event.relative.x * camera_horizontal_sensitivity)
 		camera_pitch.rotate_x(-event.relative.y * camera_vertical_sensitivity)
@@ -138,8 +144,9 @@ func _unhandled_input(event):
 	if event.is_action_pressed("lock_on"):
 		_toggle_lock_target()
 	if event.is_action_pressed("use_item"):
-		var item_id = Inventory.equipment["consumable"]
-		if item_id != "" and Inventory.use_consumable(item_id):
+		var instance_id = Inventory.get_equipped_instance_id("consumable")
+		var item_id = Inventory.get_instance_item_id(instance_id)
+		if instance_id != "" and Inventory.use_consumable_instance(instance_id):
 			get_tree().call_group("ui", "notify", "Usaste %s." % Database.get_item(item_id).display_name)
 
 func _physics_process(delta):
@@ -149,6 +156,15 @@ func _physics_process(delta):
 	_update_bonfire_transition(delta)
 	_update_camera(delta)
 	_update_poise(delta)
+	if transition_locked:
+		_cancel_attack_press()
+		_stop_horizontal(delta, 16.0)
+		_apply_gravity(delta)
+		move_and_slide()
+		_update_visual_state()
+		_update_debug_label()
+		return
+	_update_attack_input(delta)
 	_update_action(delta)
 	_apply_gravity(delta)
 	_validate_lock_target()
@@ -172,6 +188,13 @@ func _physics_process(delta):
 	move_and_slide()
 	_update_visual_state()
 	_update_debug_label()
+
+func set_transition_locked(value: bool):
+	transition_locked = value
+	if value:
+		_cancel_attack_press()
+		buffered_attack = ""
+		velocity = Vector3.ZERO
 
 func _update_camera(delta: float):
 	if camera_pivot == null:
@@ -255,12 +278,45 @@ func _handle_movement(delta: float):
 func _handle_actions():
 	if Input.is_action_just_pressed("roll"):
 		_start_roll()
-	elif Input.is_action_just_pressed("heavy_attack"):
-		_start_attack("heavy")
-	elif Input.is_action_just_pressed("light_attack"):
-		_start_attack("light")
+
+func _update_attack_input(delta: float):
+	if is_resting_at_bonfire or _ui_blocks_gameplay() or action_kind in ["roll", "stagger", "dead", "bonfire_rest"]:
+		_cancel_attack_press()
+		return
+	if Input.is_action_just_pressed("roll"):
+		_cancel_attack_press()
+		return
+	if Input.is_action_just_pressed("light_attack") and _can_accept_attack_input():
+		attack_press_active = true
+		attack_hold_time = 0.0
+	if not attack_press_active:
+		return
+	if Input.is_action_pressed("light_attack"):
+		attack_hold_time += delta
+		if attack_hold_time >= ATTACK_HOLD_THRESHOLD:
+			attack_press_active = false
+			_request_attack("heavy")
+	else:
+		attack_press_active = false
+		_request_attack("light")
+
+func _can_accept_attack_input() -> bool:
+	if not action.is_active():
+		return true
+	return action_kind == "attack" and action.get_phase() == "recovery" and action.get_phase_progress() >= 0.42
+
+func _request_attack(kind: String):
+	if not action.is_active():
+		_start_attack(kind)
+	elif action_kind == "attack" and action.get_phase() == "recovery" and action.get_phase_progress() >= 0.42:
+		buffered_attack = kind
+
+func _cancel_attack_press():
+	attack_press_active = false
+	attack_hold_time = 0.0
 
 func _start_roll():
+	_cancel_attack_press()
 	if action.is_active() or not GameState.spend_stamina(ROLL_COST):
 		return
 	roll_direction = _get_input_direction()
@@ -328,11 +384,6 @@ func _update_action(delta: float):
 		_finish_action()
 		return
 	if action_kind == "attack":
-		if action.get_phase() == "recovery" and action.get_phase_progress() >= 0.42:
-			if Input.is_action_just_pressed("light_attack"):
-				buffered_attack = "light"
-			elif Input.is_action_just_pressed("heavy_attack"):
-				buffered_attack = "heavy"
 		if action.get_phase() == "windup":
 			if _has_lock_target():
 				var target_direction = _direction_to_lock_target()
@@ -379,7 +430,9 @@ func _apply_attack_hit() -> bool:
 	var reach = weapon.attack_reach if weapon != null else 1.6
 	var arc = deg_to_rad(weapon.attack_arc if weapon != null else 80.0)
 	var damage = GameState.calculate_weapon_damage(weapon, attack_type)
-	var poise_damage = damage * (0.96 if attack_type == "heavy" else 0.32)
+	var poise_damage = 36.0 if attack_type == "heavy" else 12.0
+	if weapon != null:
+		poise_damage = weapon.heavy_poise_damage if attack_type == "heavy" else weapon.light_poise_damage
 	var impact_force = 5.2 if attack_type == "heavy" else 2.4
 	var connected := false
 	for enemy in get_tree().get_nodes_in_group("enemies"):
@@ -428,6 +481,7 @@ func add_camera_shake(strength: float):
 	camera_shake_strength = max(camera_shake_strength, strength)
 
 func _start_stagger():
+	_cancel_attack_press()
 	action.cancel()
 	action_kind = "stagger"
 	is_attacking = false
@@ -437,6 +491,7 @@ func _start_stagger():
 	action.begin("stagger", [{"name":"stagger", "duration":stagger_duration, "interruptible":false}])
 
 func _die():
+	_cancel_attack_press()
 	action.cancel()
 	action_kind = "dead"
 	is_attacking = false
@@ -492,6 +547,7 @@ func _update_bonfire_transition(delta: float):
 		action_kind = ""
 
 func begin_bonfire_rest(bonfire_position: Vector3):
+	_cancel_attack_press()
 	action.cancel()
 	action_kind = "bonfire_rest"
 	is_attacking = false
@@ -521,7 +577,7 @@ func _update_equipment_visuals():
 	visual_model.set_character_class(GameState.class_id)
 	visual_model.set_equipped_weapon(Inventory.get_equipped_weapon())
 	visual_model.set_equipped_armor(Inventory.get_equipped_armor())
-	max_poise = player_max_poise + Inventory.get_total_defense() * 1.4
+	max_poise = player_base_poise + Inventory.get_total_poise()
 	poise = min(poise, max_poise)
 
 func _toggle_lock_target():

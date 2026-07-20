@@ -14,6 +14,7 @@ var environment_root: GothicChurchLevel = null
 var hit_stop_serial := 0
 var enemy_spawn_points = []
 var chest_spawn_points = []
+@onready var fog_transition = $BonfireFogTransition
 
 func _ready():
 	add_to_group("game")
@@ -280,13 +281,33 @@ func _on_player_died(_position):
 	ui.notify("Perdiste tus souls. Recuperalas en la mancha verde.")
 
 func _on_rest_requested():
+	if fog_transition.is_active():
+		return
+	_run_rest_transition()
+
+func _run_rest_transition():
 	var bonfire_id: String = ui.bonfire_menu_id if ui != null else ""
 	var bonfire = _find_bonfire(bonfire_id)
-	if bonfire == null or not GameState.rest_at_bonfire(bonfire_id, bonfire.global_position):
+	if bonfire == null:
 		ui.notify("No se pudo descansar en este bonfire.")
 		return
-	_respawn_enemies()
-	if SaveManager.save_game():
+	if not fog_transition.begin(bonfire):
+		return
+	ui.hide_bonfire_menu_for_transition()
+	_set_player_transition_locked(true)
+	await fog_transition.fully_covered
+	var rested: bool = GameState.rest_at_bonfire(bonfire_id, bonfire.global_position)
+	if rested:
+		_respawn_enemies()
+	var saved: bool = SaveManager.save_game() if rested else false
+	fog_transition.reveal_from(bonfire)
+	await fog_transition.finished
+	_set_player_transition_locked(false)
+	ui.restore_bonfire_menu_after_transition()
+	if not rested:
+		ui.notify("No se pudo descansar en este bonfire.")
+		return
+	if saved:
 		ui.notify("Descansaste. Partida guardada.")
 	else:
 		ui.notify("Descansaste, pero no se pudo guardar la partida.")
@@ -298,10 +319,38 @@ func _find_bonfire(bonfire_id: String):
 	return null
 
 func _on_travel_requested(bonfire_id):
-	if GameState.travel_to_bonfire(bonfire_id):
+	if fog_transition.is_active():
+		return
+	_run_travel_transition(str(bonfire_id))
+
+func _run_travel_transition(bonfire_id: String):
+	var source_bonfire = _find_bonfire(ui.bonfire_menu_id if ui != null else "")
+	var target_bonfire = _find_bonfire(bonfire_id)
+	if source_bonfire == null or target_bonfire == null:
+		ui.notify("No se pudo viajar a ese bonfire.")
+		return
+	if not fog_transition.begin(source_bonfire):
+		return
+	ui.hide_bonfire_menu_for_transition()
+	_set_player_transition_locked(true)
+	await fog_transition.fully_covered
+	var traveled: bool = GameState.travel_to_bonfire(bonfire_id)
+	if traveled:
 		_spawn_player(GameState.current_bonfire_position)
+		_set_player_transition_locked(true)
 		_respawn_enemies()
 		ui.close_bonfire_menu()
+		await get_tree().process_frame
+	fog_transition.reveal_from(target_bonfire if traveled else source_bonfire)
+	await fog_transition.finished
+	_set_player_transition_locked(false)
+	if not traveled:
+		ui.restore_bonfire_menu_after_transition()
+		ui.notify("No se pudo viajar a ese bonfire.")
+
+func _set_player_transition_locked(value: bool):
+	if player != null and is_instance_valid(player) and player.has_method("set_transition_locked"):
+		player.set_transition_locked(value)
 
 func request_hit_stop(duration: float):
 	hit_stop_serial += 1
@@ -316,21 +365,21 @@ func spawn_combat_impact(position: Vector3, direction: Vector3, impact_type: Str
 	particles.name = "CombatImpact"
 	particles.one_shot = true
 	particles.emitting = false
-	particles.amount = 9 if impact_type == "heavy" or impact_type.contains("brute") else 5
-	particles.lifetime = 0.28
+	particles.amount = 16 if impact_type == "heavy" else (9 if impact_type.contains("brute") else 5)
+	particles.lifetime = 0.36 if impact_type == "heavy" else 0.28
 	particles.explosiveness = 1.0
 	var process = ParticleProcessMaterial.new()
 	process.direction = (direction + Vector3.UP * 0.65).normalized()
 	process.spread = 42.0
 	process.initial_velocity_min = 1.4
-	process.initial_velocity_max = 3.1
+	process.initial_velocity_max = 4.2 if impact_type == "heavy" else 3.1
 	process.gravity = Vector3(0.0, -5.0, 0.0)
-	process.scale_min = 0.025
-	process.scale_max = 0.065
+	process.scale_min = 0.85 if impact_type == "heavy" else 0.025
+	process.scale_max = 1.45 if impact_type == "heavy" else 0.065
 	particles.process_material = process
 	var spark = SphereMesh.new()
-	spark.radius = 0.035
-	spark.height = 0.07
+	spark.radius = 0.05 if impact_type == "heavy" else 0.035
+	spark.height = 0.11 if impact_type == "heavy" else 0.07
 	spark.material = VisualLibrary.material("fire" if impact_type == "heavy" else "metal")
 	particles.draw_pass_1 = spark
 	add_child(particles)
@@ -341,8 +390,8 @@ func spawn_combat_impact(position: Vector3, direction: Vector3, impact_type: Str
 	blood.name = "BloodImpact"
 	blood.one_shot = true
 	blood.emitting = false
-	blood.amount = 14 if impact_type == "heavy" or impact_type.contains("brute") else 9
-	blood.lifetime = 0.42
+	blood.amount = 20 if impact_type == "heavy" else (14 if impact_type.contains("brute") else 9)
+	blood.lifetime = 0.50 if impact_type == "heavy" else 0.42
 	blood.explosiveness = 1.0
 	var blood_process = ParticleProcessMaterial.new()
 	blood_process.direction = (direction + Vector3.UP * 0.38).normalized()

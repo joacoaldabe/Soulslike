@@ -8,4 +8,5 @@ item_id = "wanderer_set"
 display_name = "Wanderer Coat"
 description = "Abrigo flexible de viaje con proteccion ligera."
 defense = 7
+poise = 7.0
 weight = 1.1

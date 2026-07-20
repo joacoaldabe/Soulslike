@@ -25,6 +25,7 @@ Inventory="*res://scripts/autoload/Inventory.gd"
 GameState="*res://scripts/autoload/GameState.gd"
 SaveManager="*res://scripts/autoload/SaveManager.gd"
 GameSession="*res://scripts/autoload/GameSession.gd"
+AppSettings="*res://scripts/autoload/AppSettings.gd"
 
 [dotnet]
 

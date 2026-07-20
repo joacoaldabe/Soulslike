@@ -98,9 +98,13 @@ func _run():
 	_expect(player.action_kind == "attack", "light attack starts and consumes stamina")
 	await create_timer(0.9).timeout
 
+	game_state.attributes["strength"] = 99
+	game_state.attributes["dexterity"] = 99
+	game_state._recalculate_derived_stats()
 	for weapon in database.list_weapons():
-		inventory.equipment["right_weapon"] = weapon.item_id
-		inventory.emit_signal("equipment_changed")
+		if not inventory.has_item(weapon.item_id):
+			inventory.add_item(weapon.item_id, 1)
+		inventory.equip_item(weapon.item_id, "right_weapon")
 		await process_frame
 		_expect(player.visual_model.attack_family == weapon.weapon_family, "%s visual family" % weapon.display_name)
 		_expect(player.visual_model.get_armor_slot("right_weapon").get_child_count() > 0, "%s visible in hand" % weapon.display_name)
@@ -122,8 +126,7 @@ func _run():
 		_expect(armor_parts > 0, "%s class appearance" % class_data.display_name)
 	player.visual_model.set_character_class("knight")
 	player.visual_model.set_equipped_armor(database.get_armor("knight_set"))
-	inventory.equipment["right_weapon"] = "longsword"
-	inventory.emit_signal("equipment_changed")
+	inventory.equip_item("longsword", "right_weapon")
 
 	var original_position = player.global_position
 	player.global_position = Vector3(-8.0,0.0,-1.35)
@@ -158,6 +161,12 @@ func _run():
 	_expect(not game_state.has_bloodstain and game_state.souls > 0, "lost souls recovered")
 
 	var bonfire = get_nodes_in_group("bonfires").filter(func(node): return node.bonfire_id == "ash_camp")[0]
+	var bonfire_particles: GPUParticles3D = bonfire.get_node("BonfireSparks")
+	var bonfire_particle_mesh: QuadMesh = bonfire_particles.draw_pass_1
+	var bonfire_particle_process: ParticleProcessMaterial = bonfire_particles.process_material
+	_expect(bonfire_particle_mesh.size.x >= 0.09 and bonfire_particle_process.scale_min >= 0.5, "bonfire uses larger visible fire particles")
+	var bonfire_particle_material := bonfire_particle_mesh.material as StandardMaterial3D
+	_expect(bonfire_particle_material.cull_mode == BaseMaterial3D.CULL_DISABLED and bonfire_particle_material.billboard_mode == BaseMaterial3D.BILLBOARD_ENABLED, "bonfire particles face the camera and render from both sides")
 	player.global_position = bonfire.global_position + Vector3(3.0,0.0,3.0)
 	player.look_at(Vector3(bonfire.global_position.x,player.global_position.y,bonfire.global_position.z),Vector3.UP)
 	player.rotate_y(deg_to_rad(-24.0))

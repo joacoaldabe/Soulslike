@@ -41,6 +41,14 @@ func _run():
 
 	for weapon in root.get_node("Database").list_weapons():
 		model.set_equipped_weapon(weapon)
+		_expect(model.heavy_trail != null and not model.heavy_trail.local_coords, "%s has a world-space heavy weapon trail" % weapon.weapon_family)
+		model.play_attack("heavy", weapon.weapon_family, 0.85, 0)
+		model.set_action_phase("attack", "windup", 0.8)
+		_expect(not model.heavy_trail.emitting, "%s heavy trail stays hidden during wind-up" % weapon.weapon_family)
+		model.set_action_phase("attack", "active", 0.2)
+		_expect(model.heavy_trail.emitting and model.heavy_swing_effect.visible, "%s heavy trail follows the active swing" % weapon.weapon_family)
+		model.set_action_phase("attack", "recovery", 0.1)
+		_expect(not model.heavy_trail.emitting and not model.heavy_swing_effect.visible, "%s heavy trail stops during recovery" % weapon.weapon_family)
 		var attack_sides := []
 		for variant in [0, 1]:
 			model.play_attack("light", weapon.weapon_family, 0.5, variant)

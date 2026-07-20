@@ -1,6 +1,6 @@
 extends Node
 
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2
 const DEFAULT_SAVE_PATH := "user://soulslike_save.json"
 
 var save_path := DEFAULT_SAVE_PATH
